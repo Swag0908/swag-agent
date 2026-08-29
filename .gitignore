@@ -32,3 +32,11 @@ build/
 
 ### VS Code ###
 .vscode/
+
+### macOS ###
+.DS_Store
+
+### Web（详见 web/.gitignore）###
+node_modules/
+dist/
+*.local

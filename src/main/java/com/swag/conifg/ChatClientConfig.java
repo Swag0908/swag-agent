@@ -2,6 +2,7 @@ package com.swag.conifg;
 
 import com.swag.audit.advisor.AuditAdvisor;
 import com.swag.audit.tool.AuditToolCallbackFactory;
+    import com.swag.todo.TodoTools;
 import com.swag.tool.DateTimeTools;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.deepseek.DeepSeekChatOptions;
@@ -22,13 +23,16 @@ public class ChatClientConfig {
     @Autowired
     private AuditToolCallbackFactory auditToolCallbackFactory;
 
+    @Autowired
+    private TodoTools todoTools;
+
     @Bean("deepSeekV4ProChatClient")
     public ChatClient deepSeekV4ProChatClient(ChatClient.Builder builder) {
         return builder.clone().defaultOptions(
                     DeepSeekChatOptions.builder().model(DeepSeekApi.ChatModel.DEEPSEEK_V4_PRO)
                 ).defaultAdvisors(auditAdvisor)
                 .defaultTools((Object[]) auditToolCallbackFactory.wrap(
-                        ToolCallbacks.from(dateTimeTools)))
+                        ToolCallbacks.from(dateTimeTools, todoTools)))
                 .build();
     }
 }

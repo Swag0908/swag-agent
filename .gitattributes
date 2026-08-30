@@ -1,2 +1,2 @@
-/mvnw text eol=lf
-*.cmd text eol=crlf
+/swag_agent_backend/mvnw text eol=lf
+/swag_agent_backend/mvnw.cmd text eol=crlf

@@ -1,5 +1,6 @@
 // 流式调用后端聊天接口（经 Vite 代理转发到 Spring Boot）
 // 后端返回 text/plain 的纯文本流，逐块回调。
+import { authHeaders, clearAuth } from '../auth'
 
 export async function streamChat({ model, message, signal, onDelta }) {
   const url =
@@ -10,8 +11,14 @@ export async function streamChat({ model, message, signal, onDelta }) {
 
   const res = await fetch(url, {
     signal,
-    headers: { Accept: 'text/plain' }
+    headers: { Accept: 'text/plain', ...authHeaders() }
   })
+
+  if (res.status === 401) {
+    clearAuth()
+    if (location.pathname !== '/login') location.href = '/login'
+    throw new Error('未登录或登录已过期')
+  }
 
   if (!res.ok) {
     let detail = ''

@@ -1,5 +1,5 @@
 HELP.md
-src/main/resources/application-dev.properties
+**/src/main/resources/application-dev.properties
 target/
 .mvn/wrapper/maven-wrapper.jar
 !**/src/main/**/target/
@@ -36,7 +36,7 @@ build/
 ### macOS ###
 .DS_Store
 
-### Web（详见 web/.gitignore）###
+### Web（详见 swag_agent_web/.gitignore）###
 node_modules/
 dist/
 *.local

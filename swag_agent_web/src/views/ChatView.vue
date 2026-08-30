@@ -1,27 +1,43 @@
 <script setup>
 import { ref, watch, nextTick, computed } from 'vue'
-import { useChat } from './composables/useChat'
-import ChatMessage from './components/ChatMessage.vue'
-import ChatInput from './components/ChatInput.vue'
-import EmptyState from './components/EmptyState.vue'
-import ModelSelector from './components/ModelSelector.vue'
+import { useRouter } from 'vue-router'
+import { useChat } from '../composables/useChat'
+import ChatMessage from '../components/ChatMessage.vue'
+import ChatInput from '../components/ChatInput.vue'
+import EmptyState from '../components/EmptyState.vue'
+import ModelSelector from '../components/ModelSelector.vue'
+import TodoPanel from '../components/TodoPanel.vue'
+import { currentTheme, applyTheme } from '../theme'
+import { clearAuth, getUser } from '../auth'
+import { logout as logoutApi } from '../api/auth'
 
 const MODELS = [{ id: 1, name: 'DeepSeek V4 Pro', desc: '高性能推理模型' }]
 
+const router = useRouter()
 const { messages, sending, modelId, send, stop, clear } = useChat()
 
+const user = getUser()
+
 /* ---------- 主题切换 ---------- */
-const theme = ref(localStorage.getItem('swag-theme') || 'dark')
-
-function applyTheme() {
-  document.documentElement.setAttribute('data-theme', theme.value)
-  localStorage.setItem('swag-theme', theme.value)
-}
-applyTheme()
-
+const theme = ref(currentTheme())
 function toggleTheme() {
   theme.value = theme.value === 'dark' ? 'light' : 'dark'
-  applyTheme()
+  applyTheme(theme.value)
+}
+
+/* ---------- 待办面板 ---------- */
+const panelOpen = ref(false)
+const panelRef = ref(null)
+
+/* ---------- 退出登录 ---------- */
+async function logout() {
+  try {
+    await logoutApi()
+  } catch {
+    /* 忽略，本地登出优先 */
+  }
+  clearAuth()
+  router.push({ name: 'login' })
 }
 
 /* ---------- 滚动控制 ---------- */
@@ -41,15 +57,17 @@ async function scrollToBottom(smooth = true) {
   el.scrollTo({ top: el.scrollHeight, behavior: smooth ? 'smooth' : 'auto' })
 }
 
-// 消息数变化 / 流式内容增长时，若用户在底部则自动跟随
 const lastContent = computed(() => {
   const last = messages[messages.length - 1]
   return last ? last.content : ''
 })
 
-watch(() => messages.length, () => {
-  if (atBottom.value) scrollToBottom(false)
-})
+watch(
+  () => messages.length,
+  () => {
+    if (atBottom.value) scrollToBottom(false)
+  }
+)
 watch(lastContent, () => {
   if (atBottom.value) scrollToBottom(false)
 })
@@ -59,6 +77,8 @@ async function handleSend(text) {
   atBottom.value = true
   scrollToBottom(false)
   await send(text)
+  // 聊天里可能新增/完成了待办，同步刷新侧栏
+  panelRef.value?.refresh()
 }
 </script>
 
@@ -79,12 +99,37 @@ async function handleSend(text) {
         </div>
         <div class="brand-text">
           <span class="brand-name">SWAG Agent</span>
-          <span class="brand-tag">Powered by DeepSeek</span>
+          <span class="brand-tag">{{ user?.displayName || user?.username || '未登录' }}</span>
         </div>
       </div>
 
       <div class="topbar-actions">
+        <button class="nav-btn" @click="router.push({ name: 'stats' })">统计</button>
+
         <ModelSelector :model-id="modelId" :models="MODELS" @select="modelId = $event" />
+
+        <button
+          class="icon-btn"
+          :class="{ active: panelOpen }"
+          title="今日待办"
+          @click="panelOpen = !panelOpen"
+        >
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <path d="M9 6h11" />
+            <path d="M9 12h11" />
+            <path d="M9 18h11" />
+            <path d="m3 6 1.5 1.5L7 5" />
+            <path d="m3 12 1.5 1.5L7 11" />
+            <path d="m3 18 1.5 1.5L7 17" />
+          </svg>
+        </button>
 
         <button
           class="icon-btn"
@@ -131,6 +176,21 @@ async function handleSend(text) {
             <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
           </svg>
         </button>
+
+        <button class="icon-btn" title="退出登录" @click="logout">
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+            <path d="m16 17 5-5-5-5" />
+            <path d="M21 12H9" />
+          </svg>
+        </button>
       </div>
     </header>
 
@@ -162,8 +222,12 @@ async function handleSend(text) {
     <footer class="composer">
       <div class="composer-inner">
         <ChatInput :sending="sending" @send="handleSend" @stop="stop" />
-        <p class="composer-hint">Enter 发送 · Shift + Enter 换行 · 测试版暂无多轮上下文记忆</p>
+        <p class="composer-hint">
+          直接告诉我要做什么，例如「下午3点开会，写周报，买牛奶」；做完再说「xxx 做完了」。
+        </p>
       </div>
     </footer>
+
+    <TodoPanel ref="panelRef" :open="panelOpen" @close="panelOpen = false" />
   </div>
 </template>

@@ -1,6 +1,6 @@
 # SWAG Agent Web（测试版）
 
-一个用 **Vite + Vue 3** 构建的智能体前端，包含聊天、用户认证、待办和统计页面。
+一个用 **Vite + Vue 3** 构建的聊天前端，通过流式接口调用后端 **Spring Boot (Spring AI + DeepSeek)** 的智能体。
 
 ## 技术栈
 
@@ -18,18 +18,15 @@ swag_agent_web/
 ├── package.json
 └── src/
     ├── main.js
-    ├── router.js
-    ├── auth.js
     ├── styles.css          # 设计令牌 + 全局样式
     ├── App.vue
-    ├── api/                # 聊天、认证和待办接口
+    ├── api/chat.js         # 流式 fetch
     ├── composables/useChat.js
     └── components/
         ├── ChatMessage.vue   # 消息气泡（Markdown）
         ├── ChatInput.vue     # 输入框
         ├── ModelSelector.vue # 模型选择
-        ├── EmptyState.vue    # 欢迎/空状态
-        └── TodoPanel.vue     # 待办面板
+        └── EmptyState.vue    # 欢迎/空状态
 ```
 
 ## 运行
@@ -38,7 +35,7 @@ swag_agent_web/
 
 ```bash
 cd ../swag_agent_backend
-# 需配置环境变量：DEEPSEEK_API_KEY、MYSQL_PASSWORD
+# 需配置环境变量：DEEPSEEK_API_KEY、MYSQL_PASSWORD（本地开发已在 application-dev.properties 中写死）
 ./mvnw spring-boot:run
 ```
 

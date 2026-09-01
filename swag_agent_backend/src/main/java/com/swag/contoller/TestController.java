@@ -20,6 +20,11 @@ public class TestController {
     @Autowired
     private SelectModelTool selectModelTool;
 
+    private static final String SYSTEM_PROMPT = """
+            你是 swag_agent 助手。可用工具：getCurrentTime（查时间）、todo 系列（管理待办）、webSearch（联网搜索）。
+            规则：当用户的问题涉及实时或时效性信息、需要最新数据，或你对答案不确定时，必须先调用 webSearch 联网搜索，再基于搜索结果回答，并尽量附上来源链接；不要凭空编造。
+            """;
+
     /**
      * 测试聊天接口
      * @param model
@@ -29,7 +34,7 @@ public class TestController {
     @GetMapping("/chat")
     public String chat(@RequestParam(value = "model",defaultValue = "1") Integer model,@RequestParam(value = "userInput") String userInput) {
         ChatClient chatClient = selectModelTool.selectModel(model);
-        return chatClient.prompt().user(userInput)
+        return chatClient.prompt().system(SYSTEM_PROMPT).user(userInput)
                 .toolContext(toolContext())
                 .call().content();
     }
@@ -44,7 +49,7 @@ public class TestController {
     public Flux<String> chatStream(@RequestParam(value = "model", defaultValue = "1") Integer model,
                                    @RequestParam(value = "userInput") String userInput) {
         ChatClient chatClient = selectModelTool.selectModel(model);
-        Flux<String> content = chatClient.prompt().user(userInput)
+        Flux<String> content = chatClient.prompt().system(SYSTEM_PROMPT).user(userInput)
                 .toolContext(toolContext())
                 .stream().content()
                 .onErrorResume(e -> Flux.just("\n\n[错误] " + e.getMessage()));

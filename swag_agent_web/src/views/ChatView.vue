@@ -1,5 +1,5 @@
 <script setup>
-import { ref, watch, nextTick, computed } from 'vue'
+import { ref, watch, nextTick, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { useChat } from '../composables/useChat'
 import ChatMessage from '../components/ChatMessage.vue'
@@ -28,6 +28,36 @@ function toggleTheme() {
 /* ---------- 待办面板 ---------- */
 const panelOpen = ref(false)
 const panelRef = ref(null)
+
+/* ---------- 手机端「更多」菜单 ---------- */
+const moreOpen = ref(false)
+const moreRoot = ref(null)
+
+function toggleMore() {
+  moreOpen.value = !moreOpen.value
+}
+
+function onDocClick(e) {
+  if (moreRoot.value && !moreRoot.value.contains(e.target)) moreOpen.value = false
+}
+
+onMounted(() => document.addEventListener('click', onDocClick))
+onBeforeUnmount(() => document.removeEventListener('click', onDocClick))
+
+function selectMobileModel(m) {
+  modelId = m.id
+  moreOpen.value = false
+}
+
+function goStats() {
+  moreOpen.value = false
+  router.push({ name: 'stats' })
+}
+
+function clearAndClose() {
+  clear()
+  moreOpen.value = false
+}
 
 /* ---------- 退出登录 ---------- */
 async function logout() {
@@ -104,9 +134,9 @@ async function handleSend(text) {
       </div>
 
       <div class="topbar-actions">
-        <button class="nav-btn" @click="router.push({ name: 'stats' })">统计</button>
+        <button class="nav-btn desktop-only" @click="router.push({ name: 'stats' })">统计</button>
 
-        <ModelSelector :model-id="modelId" :models="MODELS" @select="modelId = $event" />
+        <ModelSelector class="desktop-only" :model-id="modelId" :models="MODELS" @select="modelId = $event" />
 
         <button
           class="icon-btn"
@@ -132,7 +162,7 @@ async function handleSend(text) {
         </button>
 
         <button
-          class="icon-btn"
+          class="icon-btn desktop-only"
           title="清空对话"
           :disabled="!messages.length"
           @click="clear"
@@ -177,7 +207,7 @@ async function handleSend(text) {
           </svg>
         </button>
 
-        <button class="icon-btn" title="退出登录" @click="logout">
+        <button class="icon-btn desktop-only" title="退出登录" @click="logout">
           <svg
             viewBox="0 0 24 24"
             fill="none"
@@ -191,6 +221,103 @@ async function handleSend(text) {
             <path d="M21 12H9" />
           </svg>
         </button>
+
+        <!-- 手机端「更多」菜单 -->
+        <div ref="moreRoot" class="more-root">
+          <button
+            class="icon-btn mobile-more"
+            :class="{ active: moreOpen }"
+            title="更多"
+            @click="toggleMore"
+          >
+            <svg
+              viewBox="0 0 24 24"
+              fill="currentColor"
+            >
+              <circle cx="12" cy="5" r="1.8" />
+              <circle cx="12" cy="12" r="1.8" />
+              <circle cx="12" cy="19" r="1.8" />
+            </svg>
+          </button>
+
+          <div v-if="moreOpen" class="more-menu">
+            <div class="more-label">模型</div>
+            <button
+              v-for="m in MODELS"
+              :key="m.id"
+              type="button"
+              class="model-item"
+              :class="{ active: m.id === modelId }"
+              @click="selectMobileModel(m)"
+            >
+              <div class="model-item-main">
+                <div class="model-item-name">{{ m.name }}</div>
+                <div class="model-item-desc">{{ m.desc }}</div>
+              </div>
+              <span v-if="m.id === modelId" class="model-item-check">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2.4"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <path d="M20 6 9 17l-5-5" />
+                </svg>
+              </span>
+            </button>
+
+            <div class="more-sep"></div>
+
+            <button type="button" class="more-action" @click="goStats">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d="M3 3v18h18" />
+                <path d="M8 17v-5M13 17V7M18 17v-8" />
+              </svg>
+              统计
+            </button>
+
+            <button type="button" class="more-action" :disabled="!messages.length" @click="clearAndClose">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d="M3 6h18" />
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
+                <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+              </svg>
+              清空对话
+            </button>
+
+            <button type="button" class="more-action danger" @click="logout">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                <path d="m16 17 5-5-5-5" />
+                <path d="M21 12H9" />
+              </svg>
+              退出登录
+            </button>
+          </div>
+        </div>
       </div>
     </header>
 

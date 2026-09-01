@@ -84,6 +84,7 @@ body {
   -moz-osx-font-smoothing: grayscale;
   overflow: hidden;
   transition: background-color 0.35s ease, color 0.35s ease;
+  -webkit-tap-highlight-color: transparent;
 }
 
 button {
@@ -92,11 +93,13 @@ button {
   border: none;
   background: none;
   color: inherit;
+  touch-action: manipulation;
 }
 
 /* ---------- 应用骨架 ---------- */
 .app {
   position: relative;
+  height: 100vh;
   height: 100dvh;
   display: flex;
   flex-direction: column;
@@ -123,7 +126,7 @@ button {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 14px 20px;
+  padding: max(14px, env(safe-area-inset-top)) 20px;
   border-bottom: 1px solid var(--border);
   background: var(--surface);
   backdrop-filter: blur(18px) saturate(140%);
@@ -459,7 +462,12 @@ button {
   margin: 0.8em 0;
   border-collapse: collapse;
   font-size: 0.95em;
-  width: 100%;
+  /* 窄屏下表格可横向滚动，避免撑破气泡 */
+  display: block;
+  width: max-content;
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 .markdown th,
 .markdown td {
@@ -776,19 +784,247 @@ button {
   height: 16px;
 }
 
+/* ---------- 手机端「更多」菜单 ---------- */
+.more-root {
+  position: relative;
+}
+
+.more-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  min-width: 230px;
+  padding: 6px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--surface-solid);
+  box-shadow: var(--shadow);
+  z-index: 40;
+  animation: menu-in 0.18s ease both;
+}
+
+.more-label {
+  padding: 8px 12px 4px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.more-action {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 9px;
+  text-align: left;
+  font-size: 13.5px;
+  color: var(--text-2);
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.more-action:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.more-action:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.more-action.danger:hover {
+  color: var(--danger);
+  background: rgba(248, 113, 113, 0.1);
+}
+
+.more-action svg {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  opacity: 0.8;
+}
+
+.more-sep {
+  height: 1px;
+  margin: 6px 8px;
+  background: var(--border);
+}
+
 /* ---------- 响应式 ---------- */
+/* 手机端才显示「更多」按钮；桌面端默认显示全部顶栏按钮 */
+.mobile-more {
+  display: none;
+}
+
+/* 平板 / 小屏笔记本：整体收紧间距 */
+@media (max-width: 900px) {
+  .topbar {
+    padding: max(12px, env(safe-area-inset-top)) 16px;
+  }
+  .messages {
+    padding: 24px 16px 18px;
+  }
+  .composer {
+    padding: 10px 16px max(14px, env(safe-area-inset-bottom));
+  }
+}
+
+/* 手机（竖屏）：顶栏收进「更多」菜单，紧凑布局，输入框字号 ≥16px 防止 iOS 聚焦缩放 */
 @media (max-width: 640px) {
-  .bubble {
-    max-width: 84%;
+  .desktop-only {
+    display: none;
+  }
+  .mobile-more {
+    display: grid;
+  }
+
+  .topbar {
+    padding: max(10px, env(safe-area-inset-top)) 12px;
+    gap: 8px;
+  }
+  .brand {
+    gap: 8px;
+  }
+  .brand-logo {
+    width: 32px;
+    height: 32px;
+    border-radius: 10px;
+  }
+  .brand-logo svg {
+    width: 17px;
+    height: 17px;
+  }
+  .brand-name {
+    font-size: 14px;
+    white-space: nowrap;
   }
   .brand-tag {
     display: none;
   }
-  .messages {
-    padding: 20px 14px 16px;
+  .topbar-actions {
+    gap: 6px;
   }
+  .icon-btn {
+    width: 34px;
+    height: 34px;
+    border-radius: 10px;
+  }
+  .icon-btn svg {
+    width: 16px;
+    height: 16px;
+  }
+  .more-menu {
+    min-width: 210px;
+  }
+
+  .messages {
+    padding: 18px 10px 14px;
+    gap: 18px;
+  }
+  .msg {
+    gap: 8px;
+  }
+  .msg-avatar {
+    width: 30px;
+    height: 30px;
+    border-radius: 9px;
+    font-size: 12px;
+  }
+  .msg-avatar svg {
+    width: 15px;
+    height: 15px;
+  }
+  .bubble {
+    max-width: 86%;
+    padding: 11px 13px;
+    font-size: 14px;
+  }
+
+  .scroll-fab {
+    bottom: 96px;
+  }
+
   .composer {
-    padding: 10px 12px max(14px, env(safe-area-inset-bottom));
+    padding: 8px 10px max(12px, env(safe-area-inset-bottom));
+  }
+  .composer-box {
+    padding: 6px;
+    border-radius: 16px;
+  }
+  .composer-input {
+    font-size: 16px;
+    padding: 6px 4px;
+  }
+  .send-btn {
+    width: 38px;
+    height: 38px;
+    border-radius: 11px;
+  }
+  .composer-hint {
+    display: none;
+  }
+
+  .empty {
+    padding: 24px 16px;
+  }
+  .empty-orb {
+    width: 60px;
+    height: 60px;
+    border-radius: 19px;
+    margin-bottom: 14px;
+  }
+  .empty-orb svg {
+    width: 28px;
+    height: 28px;
+  }
+  .empty-title {
+    font-size: 20px;
+  }
+  .empty-sub {
+    font-size: 13px;
+  }
+  .prompts {
+    gap: 8px;
+    margin-top: 20px;
+  }
+  .prompt-chip {
+    padding: 8px 13px;
+    font-size: 13px;
+  }
+
+  /* 登录页 */
+  .auth-page {
+    padding: 24px 16px;
+    overflow-y: auto;
+  }
+  .auth-card {
+    padding: 24px 20px 20px;
+  }
+  .field input {
+    font-size: 16px;
+  }
+
+  /* 统计页 */
+  .stats-wrap {
+    padding: 20px 12px 32px;
+  }
+  .stat-box {
+    padding: 13px 8px;
+  }
+  .stat-num {
+    font-size: 22px;
+  }
+  .stats-day {
+    padding: 12px;
+  }
+
+  /* 待办抽屉输入框 */
+  .todo-input,
+  .todo-input.note {
+    font-size: 16px;
   }
 }
 
@@ -797,9 +1033,9 @@ button {
    ============================================================ */
 .auth-page {
   position: relative;
+  height: 100vh;
   height: 100dvh;
-  display: grid;
-  place-items: center;
+  display: flex;
   padding: 20px;
   overflow: hidden;
 }
@@ -818,6 +1054,7 @@ button {
   position: relative;
   width: 100%;
   max-width: 380px;
+  margin: auto;
   padding: 30px 28px 24px;
   border-radius: var(--radius-lg);
   border: 1px solid var(--border);

@@ -28,6 +28,7 @@ const query = ref('')
 
 const theme = ref(currentTheme())
 const faviconFailed = ref({})
+const faviconIdx = ref({})
 
 const folderModal = ref(false)
 const folderSaving = ref(false)
@@ -303,8 +304,28 @@ function domain(url) {
   }
 }
 
-function faviconUrl(url) {
-  return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain(url))}&sz=64`
+function faviconUrl(bookmark) {
+  const candidates = faviconCandidates(bookmark)
+  const idx = faviconIdx.value[bookmark.id] ?? 0
+  return candidates[idx] || null
+}
+
+function faviconCandidates(bookmark) {
+  const list = []
+  const custom = (bookmark.iconUrl || '').trim()
+  if (custom) list.push(custom)
+  let host
+  try {
+    host = new URL(bookmark.url).hostname
+  } catch {
+    host = bookmark.url
+  }
+  if (host) {
+    // Google s2/favicons 大陆不可达，改为国内可达的 DNSPod 代理，再兜底直连站点 favicon.ico
+    list.push(`https://statics.dnspod.cn/proxy_favicon/_/favicon?domain=${encodeURIComponent(host)}`)
+    list.push(`https://${host}/favicon.ico`)
+  }
+  return list
 }
 
 function monogram(name) {
@@ -328,8 +349,15 @@ function avatarStyle(bookmark) {
   }
 }
 
-function onFaviconError(id) {
-  faviconFailed.value = { ...faviconFailed.value, [id]: true }
+function onFaviconError(bookmark) {
+  const candidates = faviconCandidates(bookmark)
+  const cur = faviconIdx.value[bookmark.id] ?? 0
+  const next = cur + 1
+  if (next < candidates.length) {
+    faviconIdx.value = { ...faviconIdx.value, [bookmark.id]: next }
+  } else {
+    faviconFailed.value = { ...faviconFailed.value, [bookmark.id]: true }
+  }
 }
 
 function collectNode(node, map) {
@@ -517,11 +545,11 @@ onMounted(load)
             <div class="site-card-head">
               <a class="site-favicon" :href="bookmark.url" target="_blank" rel="noopener">
                 <img
-                  v-if="!faviconFailed[bookmark.id]"
-                  :src="faviconUrl(bookmark.url)"
+                  v-if="!faviconFailed[bookmark.id] && faviconUrl(bookmark)"
+                  :src="faviconUrl(bookmark)"
                   :alt="bookmark.name"
                   loading="lazy"
-                  @error="onFaviconError(bookmark.id)"
+                  @error="onFaviconError(bookmark)"
                 />
                 <span v-else :style="avatarStyle(bookmark)">{{ monogram(bookmark.name) }}</span>
               </a>

@@ -21,7 +21,11 @@ public class TestController {
     private SelectModelTool selectModelTool;
 
     private static final String SYSTEM_PROMPT = """
-            你是 swag_agent 助手。可用工具：getCurrentTime（查时间）、todo 系列（管理待办）、webSearch（联网搜索）。
+            你是 swag_agent 助手。可用工具：getCurrentTime（查时间）、todo 系列（管理待办）、webSearch（联网搜索）、
+            常用网站系列（管理当前用户自己的常用网站菜单，均为用户维度：listSiteFolders 查分类、listSiteBookmarks 查网站、
+            addSiteBookmark 添加网站、updateSiteBookmark 修改网站、deleteSiteBookmark 删除网站、
+            createSiteFolder 新建分类、updateSiteFolder 重命名/移动分类、deleteSiteFolder 删除分类）。
+            添加网站时若分类不存在或含义相近，先向用户确认是新建还是放入相近分类，得到同意后再操作；删除前先征得用户确认。
             规则：当用户的问题涉及实时或时效性信息、需要最新数据，或你对答案不确定时，必须先调用 webSearch 联网搜索，再基于搜索结果回答，并尽量附上来源链接；不要凭空编造。
             """;
 

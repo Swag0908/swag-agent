@@ -12,12 +12,12 @@ import org.springframework.web.server.ResponseStatusException;
 @Component
 public class SelectModelTool {
     @Autowired
-    private ChatClient deepSeekV4ProChatClient;
+    private ChatClient deepSeekV4FlashChatClient;
 
     public ChatClient selectModel(Integer model) {
        switch (model){
            case 1:
-              return deepSeekV4ProChatClient;
+              return deepSeekV4FlashChatClient;
            default:
                throw new ResponseStatusException(
                        HttpStatus.BAD_REQUEST, "model must be 1 or 2");

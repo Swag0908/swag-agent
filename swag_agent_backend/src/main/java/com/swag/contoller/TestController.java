@@ -4,6 +4,7 @@ import com.swag.audit.context.AuditContextHolder;
 import com.swag.auth.UserContextHolder;
 import com.swag.tool.SelectModelTool;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -39,12 +40,16 @@ public class TestController {
     public String chat(@RequestParam(value = "model",defaultValue = "1") Integer model,@RequestParam(value = "userInput") String userInput) {
         ChatClient chatClient = selectModelTool.selectModel(model);
         return chatClient.prompt().system(SYSTEM_PROMPT).user(userInput)
+                .advisors(a -> a.param(ChatMemory.CONVERSATION_ID, conversationId()))
                 .toolContext(toolContext())
                 .call().content();
     }
 
     /**
      * 流式聊天接口：返回纯文本流（逐字输出），前端通过 Vite 代理读取。
+     * 对话记忆由 ChatClient 的默认 Advisor 自动处理：
+     * 短期 = MessageChatMemoryAdvisor（最近 N 条逐字回放），长期 = VectorStoreChatMemoryAdvisor（pgvector 语义召回）。
+     * 二者都按 conversationId（= 当前登录用户 ID）隔离。
      * @param model
      * @param userInput
      * @return
@@ -54,10 +59,19 @@ public class TestController {
                                    @RequestParam(value = "userInput") String userInput) {
         ChatClient chatClient = selectModelTool.selectModel(model);
         Flux<String> content = chatClient.prompt().system(SYSTEM_PROMPT).user(userInput)
+                .advisors(a -> a.param(ChatMemory.CONVERSATION_ID, conversationId()))
                 .toolContext(toolContext())
                 .stream().content()
                 .onErrorResume(e -> Flux.just("\n\n[错误] " + e.getMessage()));
         return AuditContextHolder.propagate(content);
+    }
+
+    /**
+     * 记忆按用户隔离：同一登录用户 = 同一条对话线（conversation）。
+     */
+    private String conversationId() {
+        Long userId = UserContextHolder.currentUserId();
+        return userId == null ? "anonymous" : userId.toString();
     }
 
     /**

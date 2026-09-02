@@ -11,7 +11,11 @@ import { currentTheme, applyTheme } from '../theme'
 import { clearAuth, getUser } from '../auth'
 import { logout as logoutApi } from '../api/auth'
 
-const MODELS = [{ id: 1, name: 'DeepSeek V4 Pro', desc: '高性能推理模型' }]
+// id 与后端 SelectModelTool 保持一致：1 = V4 Flash（默认），2 = V4 Pro
+const MODELS = [
+  { id: 1, name: 'DeepSeek V4 Flash', desc: '快速响应，适合日常对话' },
+  { id: 2, name: 'DeepSeek V4 Pro', desc: '深度推理，适合复杂任务' }
+]
 
 const router = useRouter()
 const { messages, sending, modelId, send, stop, clear } = useChat()

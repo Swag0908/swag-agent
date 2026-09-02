@@ -73,6 +73,7 @@ onMounted(load)
       </div>
 
       <div class="topbar-actions">
+        <button class="nav-btn" @click="router.push({ name: 'sites' })">常用网站</button>
         <button class="nav-btn" @click="router.push({ name: 'chat' })">返回聊天</button>
       </div>
     </header>

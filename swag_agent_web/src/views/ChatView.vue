@@ -45,13 +45,22 @@ onMounted(() => document.addEventListener('click', onDocClick))
 onBeforeUnmount(() => document.removeEventListener('click', onDocClick))
 
 function selectMobileModel(m) {
-  modelId = m.id
+  modelId.value = m.id
   moreOpen.value = false
+}
+
+function selectModel(id) {
+  modelId.value = id
 }
 
 function goStats() {
   moreOpen.value = false
   router.push({ name: 'stats' })
+}
+
+function goSites() {
+  moreOpen.value = false
+  router.push({ name: 'sites' })
 }
 
 function clearAndClose() {
@@ -134,9 +143,10 @@ async function handleSend(text) {
       </div>
 
       <div class="topbar-actions">
+        <button class="nav-btn desktop-only" @click="router.push({ name: 'sites' })">常用网站</button>
         <button class="nav-btn desktop-only" @click="router.push({ name: 'stats' })">统计</button>
 
-        <ModelSelector class="desktop-only" :model-id="modelId" :models="MODELS" @select="modelId = $event" />
+        <ModelSelector class="desktop-only" :model-id="modelId" :models="MODELS" @select="selectModel" />
 
         <button
           class="icon-btn"
@@ -269,6 +279,21 @@ async function handleSend(text) {
             </button>
 
             <div class="more-sep"></div>
+
+            <button type="button" class="more-action" @click="goSites">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <circle cx="12" cy="12" r="9" />
+                <path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18" />
+              </svg>
+              常用网站
+            </button>
 
             <button type="button" class="more-action" @click="goStats">
               <svg

@@ -88,4 +88,19 @@ public class ChatClientConfig {
                         ToolCallbacks.from(dateTimeTools, todoTools, webSearchTools, websiteTools)))
                 .build();
     }
+
+    @Bean("deepSeekV4ProChatClient")
+    public ChatClient deepSeekV4ProChatClient(ChatClient.Builder builder) {
+        return builder.clone().defaultOptions(
+                        DeepSeekChatOptions.builder().model(DeepSeekApi.ChatModel.DEEPSEEK_V4_PRO)
+                ).defaultAdvisors(auditAdvisor,
+                        MessageChatMemoryAdvisor.builder(jdbcChatMemory())
+                                // 同上：流式落库同步化，避免相邻两轮竞态丢记忆
+                                .scheduler(Schedulers.immediate())
+                                .build(),
+                        vectorStoreChatMemoryAdvisor())
+                .defaultTools((Object[]) auditToolCallbackFactory.wrap(
+                        ToolCallbacks.from(dateTimeTools, todoTools, webSearchTools, websiteTools)))
+                .build();
+    }
 }

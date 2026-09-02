@@ -1,0 +1,43 @@
+# swag-agent-backend systemd 服务单元
+# 安装位置：/etc/systemd/system/swag-agent-backend.service
+# 用法：
+#   sudo install -m 644 swag-agent-backend.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now swag-agent-backend
+# 日志查看：journalctl -u swag-agent-backend -f
+
+[Unit]
+Description=SWAG Agent Backend (Spring Boot + Spring AI + DeepSeek)
+Documentation=https://github.com/Swag0908/swag-agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# 以 root 运行（如需专用用户请改为 User=swag 并在 ExecStart 路径上放开权限）
+User=root
+Group=root
+
+# 服务实际工作目录与 jar 所在目录
+WorkingDirectory=/opt/swag-agent/backend
+
+# 密钥/环境变量文件（需 chmod 600，参见同目录 swag-agent-backend.env.example）
+EnvironmentFile=/etc/swag-agent-backend.env
+
+# JAVA_OPTS 可在环境变量文件中可选设置（如 JAVA_OPTS=-Xmx512m），未设置则为空
+ExecStart=/usr/bin/java ${JAVA_OPTS} -jar /opt/swag-agent/backend/swag_agent-0.0.1-SNAPSHOT.jar
+
+# 崩溃自动拉起，5 秒后重试
+Restart=always
+RestartSec=5
+
+# 优雅停机（Spring Boot 收到 SIGTERM 后平滑关闭）
+KillSignal=SIGTERM
+TimeoutStopSec=30
+SuccessExitStatus=143
+
+# 打开文件数上限（可选）
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

@@ -40,3 +40,6 @@ build/
 node_modules/
 dist/
 *.local
+
+### 部署敏感文件（含真实密钥，勿提交）###
+/swag_agent_backend/deploy/swag-agent-backend.env

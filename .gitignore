@@ -43,3 +43,6 @@ dist/
 
 ### 部署敏感文件（含真实密钥，勿提交）###
 /swag_agent_backend/deploy/swag-agent-backend.env
+
+### 发布脚本（含服务器 IP/账号，勿提交 GitHub）###
+/deploy/

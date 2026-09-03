@@ -2,6 +2,7 @@ package com.swag.conifg;
 
 import com.swag.audit.advisor.AuditAdvisor;
 import com.swag.audit.tool.AuditToolCallbackFactory;
+import com.swag.memory.UserMemoryTools;
 import com.swag.sites.WebsiteTools;
 import com.swag.todo.TodoTools;
 import com.swag.tool.DateTimeTools;
@@ -40,6 +41,9 @@ public class ChatClientConfig {
 
     @Autowired
     private WebsiteTools websiteTools;
+
+    @Autowired
+    private UserMemoryTools userMemoryTools;
 
     /** 短期记忆仓库（主 MySQL），由 spring-ai-starter-model-chat-memory-repository-jdbc 自动装配。 */
     @Autowired
@@ -85,7 +89,7 @@ public class ChatClientConfig {
                                 .build(),
                         vectorStoreChatMemoryAdvisor())
                 .defaultTools((Object[]) auditToolCallbackFactory.wrap(
-                        ToolCallbacks.from(dateTimeTools, todoTools, webSearchTools, websiteTools)))
+                        ToolCallbacks.from(dateTimeTools, todoTools, webSearchTools, websiteTools, userMemoryTools)))
                 .build();
     }
 
@@ -100,7 +104,7 @@ public class ChatClientConfig {
                                 .build(),
                         vectorStoreChatMemoryAdvisor())
                 .defaultTools((Object[]) auditToolCallbackFactory.wrap(
-                        ToolCallbacks.from(dateTimeTools, todoTools, webSearchTools, websiteTools)))
+                        ToolCallbacks.from(dateTimeTools, todoTools, webSearchTools, websiteTools, userMemoryTools)))
                 .build();
     }
 }

@@ -2,12 +2,12 @@
 // 后端返回 text/plain 的纯文本流，逐块回调。
 import { authHeaders, clearAuth } from '../auth'
 
-export async function streamChat({ model, message, signal, onDelta }) {
-  const url =
-    '/api/test/chat/stream?model=' +
-    encodeURIComponent(model) +
-    '&userInput=' +
-    encodeURIComponent(message)
+export async function streamChat({ model, message, conversationId, signal, onDelta }) {
+  const params = new URLSearchParams()
+  params.set('model', String(model))
+  params.set('userInput', message)
+  if (conversationId) params.set('conversationId', String(conversationId))
+  const url = '/api/test/chat/stream?' + params.toString()
 
   const res = await fetch(url, {
     signal,

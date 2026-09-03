@@ -1,12 +1,14 @@
 <script setup>
 import { ref, watch, nextTick, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
-import { useChat } from '../composables/useChat'
+import { useChat, ACTIVE_CONVERSATION_KEY } from '../composables/useChat'
 import ChatMessage from '../components/ChatMessage.vue'
 import ChatInput from '../components/ChatInput.vue'
 import EmptyState from '../components/EmptyState.vue'
 import ModelSelector from '../components/ModelSelector.vue'
 import TodoPanel from '../components/TodoPanel.vue'
+import ConversationList from '../components/ConversationList.vue'
+import UserMemoryPanel from '../components/UserMemoryPanel.vue'
 import { currentTheme, applyTheme } from '../theme'
 import { clearAuth, getUser } from '../auth'
 import { logout as logoutApi } from '../api/auth'
@@ -17,7 +19,20 @@ const MODELS = [
 ]
 
 const router = useRouter()
-const { messages, sending, modelId, send, stop, clear } = useChat()
+const {
+  messages,
+  sending,
+  modelId,
+  conversations,
+  conversationId,
+  conversationTitle,
+  loadingHistory,
+  send,
+  stop,
+  newConversation,
+  openConversation,
+  refreshConversations
+} = useChat()
 const user = getUser()
 
 const theme = ref(currentTheme())
@@ -28,6 +43,8 @@ function toggleTheme() {
 
 const panelOpen = ref(false)
 const panelRef = ref(null)
+const memoryOpen = ref(false)
+const histOpen = ref(false)
 const moreOpen = ref(false)
 const moreRoot = ref(null)
 
@@ -39,7 +56,19 @@ function onDocClick(event) {
   if (moreRoot.value && !moreRoot.value.contains(event.target)) moreOpen.value = false
 }
 
-onMounted(() => document.addEventListener('click', onDocClick))
+onMounted(async () => {
+  document.addEventListener('click', onDocClick)
+  await refreshConversations()
+  // 优先恢复上次打开的会话；其次自动打开最近会话，避免每次都要重新输入相同问题
+  if (conversationId.value == null) {
+    const saved = Number(localStorage.getItem(ACTIVE_CONVERSATION_KEY))
+    const target =
+      conversations.value.find((c) => Number(c.id) === saved) ||
+      conversations.value[0] ||
+      null
+    if (target) await openConversation(target)
+  }
+})
 onBeforeUnmount(() => document.removeEventListener('click', onDocClick))
 
 function selectMobileModel(model) {
@@ -61,9 +90,15 @@ function goSites() {
   router.push({ name: 'sites' })
 }
 
-function clearAndClose() {
-  clear()
+async function startNewChat() {
   moreOpen.value = false
+  histOpen.value = false
+  newConversation()
+}
+
+async function onSelectConversation(conv) {
+  histOpen.value = false
+  await openConversation(conv)
 }
 
 async function logout() {
@@ -107,6 +142,13 @@ watch(lastContent, () => {
   if (atBottom.value) scrollToBottom(false)
 })
 
+const currentTitle = computed(() => {
+  if (conversationId.value != null) {
+    return conversationTitle.value || (messages.length ? '当前会话' : '新对话')
+  }
+  return messages.length ? '当前会话' : '新任务'
+})
+
 async function handleSend(text) {
   atBottom.value = true
   scrollToBottom(false)
@@ -128,14 +170,26 @@ async function handleSend(text) {
         </div>
       </div>
 
-      <button class="new-session" type="button" @click="clear">
+      <button class="new-session" type="button" @click="startNewChat">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
           <path d="M12 5v14M5 12h14" />
         </svg>
         <span>新建会话</span>
       </button>
 
-      <div class="sidebar-section">
+      <div class="sidebar-history">
+        <div class="sidebar-label">历史会话</div>
+        <div class="history-scroll">
+          <ConversationList
+            :conversations="conversations"
+            :active-id="conversationId"
+            empty-text="暂无历史会话"
+            @select="onSelectConversation"
+          />
+        </div>
+      </div>
+
+      <div class="sidebar-section nav-dock">
         <div class="sidebar-label">WORKSPACE</div>
         <nav class="sidebar-nav" aria-label="主导航">
           <button class="sidebar-link active" type="button">
@@ -150,6 +204,12 @@ async function handleSend(text) {
               <path d="M8 6h12M8 12h12M8 18h12M3.5 6h.01M3.5 12h.01M3.5 18h.01" />
             </svg>
             <span>今日待办</span>
+          </button>
+          <button class="sidebar-link" type="button" @click="memoryOpen = true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <path d="M9 4h6v2H9V4Zm-2 3h10v2H7V7Zm-2 3h14v2H5v-2Zm4 3h6v7l-3-2-3 2v-7Z" />
+            </svg>
+            <span>我的记忆</span>
           </button>
           <button class="sidebar-link" type="button" @click="goSites">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
@@ -166,8 +226,6 @@ async function handleSend(text) {
           </button>
         </nav>
       </div>
-
-      <div class="sidebar-spacer"></div>
 
       <div class="system-card">
         <div class="system-card-head">
@@ -201,9 +259,14 @@ async function handleSend(text) {
         <div class="workspace-title desktop-shell">
           <span>COWHOURSE LEGEND</span>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="m9 18 6-6-6-6" /></svg>
-          <strong>{{ messages.length ? '当前会话' : '新任务' }}</strong>
+          <strong>{{ currentTitle }}</strong>
         </div>
         <div class="workspace-actions">
+          <button class="work-icon mobile-shell" type="button" title="历史会话" @click="histOpen = !histOpen">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <path d="M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01" />
+            </svg>
+          </button>
           <div class="preview-badge desktop-shell"><span></span>LIVE</div>
           <ModelSelector class="desktop-shell" :model-id="modelId" :models="MODELS" @select="selectModel" />
           <button class="work-icon" type="button" title="切换主题" @click="toggleTheme">
@@ -235,10 +298,12 @@ async function handleSend(text) {
                 </div>
               </button>
               <div class="more-sep"></div>
+              <button type="button" class="more-action" @click="startNewChat">新建会话</button>
+              <button type="button" class="more-action" @click="histOpen = true; moreOpen = false">历史会话</button>
+              <button type="button" class="more-action" @click="memoryOpen = true; moreOpen = false">我的记忆</button>
               <button type="button" class="more-action" @click="panelOpen = true; moreOpen = false">今日待办</button>
               <button type="button" class="more-action" @click="goSites">常用网站</button>
               <button type="button" class="more-action" @click="goStats">效率统计</button>
-              <button type="button" class="more-action" :disabled="!messages.length" @click="clearAndClose">清空对话</button>
               <button type="button" class="more-action danger" @click="logout">退出登录</button>
             </div>
           </div>
@@ -246,7 +311,8 @@ async function handleSend(text) {
       </header>
 
       <main ref="chatEl" class="chat" @scroll="onScroll">
-        <EmptyState v-if="!messages.length" @select="handleSend" />
+        <div v-if="loadingHistory" class="history-loading">正在载入历史对话…</div>
+        <EmptyState v-else-if="!messages.length" @select="handleSend" />
         <div v-else class="messages">
           <ChatMessage v-for="message in messages" :key="message.id" :message="message" />
         </div>
@@ -269,6 +335,36 @@ async function handleSend(text) {
       </footer>
     </section>
 
+    <!-- 移动端历史会话抽屉 -->
+    <transition name="fade">
+      <div v-if="histOpen" class="hist-mask" @click="histOpen = false"></div>
+    </transition>
+    <aside class="hist-drawer" :class="{ open: histOpen }">
+      <header class="hist-head">
+        <div>
+          <h2>历史会话</h2>
+          <p class="hist-sub">{{ conversations.length }} 个会话</p>
+        </div>
+        <button class="icon-btn" title="关闭" @click="histOpen = false">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M18 6 6 18M6 6l12 12" />
+          </svg>
+        </button>
+      </header>
+      <div class="hist-body">
+        <ConversationList
+          :conversations="conversations"
+          :active-id="conversationId"
+          empty-text="还没有历史会话"
+          @select="onSelectConversation"
+        />
+      </div>
+      <footer class="hist-foot">
+        <button class="hist-new" type="button" @click="startNewChat">＋ 新建会话</button>
+      </footer>
+    </aside>
+
     <TodoPanel ref="panelRef" :open="panelOpen" @close="panelOpen = false" />
+    <UserMemoryPanel :open="memoryOpen" @close="memoryOpen = false" />
   </div>
 </template>

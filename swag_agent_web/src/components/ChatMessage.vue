@@ -18,19 +18,7 @@ const rendered = computed(() => {
 <template>
   <div class="msg" :class="message.role">
     <div class="msg-avatar" aria-hidden="true">
-      <svg
-        v-if="message.role === 'assistant'"
-        viewBox="0 0 24 24"
-        fill="currentColor"
-      >
-        <path
-          d="M12 2.5l2.1 6.4 6.4 2.1-6.4 2.1L12 19.5l-2.1-6.4L3.5 11l6.4-2.1L12 2.5z"
-        />
-        <path
-          d="M19 3l.7 2.3L22 6l-2.3.7L19 9l-.7-2.3L16 6l2.3-.7L19 3z"
-          opacity=".7"
-        />
-      </svg>
+      <img v-if="message.role === 'assistant'" src="/brand/cowhorse-glyph-256.png" alt="" />
       <svg
         v-else
         viewBox="0 0 24 24"

@@ -43,19 +43,11 @@ async function submit() {
     <div class="auth-card">
       <div class="auth-brand">
         <div class="auth-logo">
-          <svg viewBox="0 0 24 24" fill="currentColor">
-            <path
-              d="M12 2.5l2.1 6.4 6.4 2.1-6.4 2.1L12 19.5l-2.1-6.4L3.5 11l6.4-2.1L12 2.5z"
-            />
-            <path
-              d="M19 3l.7 2.3L22 6l-2.3.7L19 9l-.7-2.3L16 6l2.3-.7L19 3z"
-              opacity=".7"
-            />
-          </svg>
+          <img src="/brand/cowhorse-glyph-256.png" alt="" />
         </div>
         <div>
-          <h1 class="auth-title">SWAG Agent</h1>
-          <p class="auth-sub">登录后开始安排你的一天</p>
+          <h1 class="auth-title">Cowhourse Legend</h1>
+          <p class="auth-sub">成为牛马传奇</p>
         </div>
       </div>
 

@@ -11,7 +11,6 @@ import { currentTheme, applyTheme } from '../theme'
 import { clearAuth, getUser } from '../auth'
 import { logout as logoutApi } from '../api/auth'
 
-// id 与后端 SelectModelTool 保持一致：1 = V4 Flash（默认），2 = V4 Pro
 const MODELS = [
   { id: 1, name: 'DeepSeek V4 Flash', desc: '快速响应，适合日常对话' },
   { id: 2, name: 'DeepSeek V4 Pro', desc: '深度推理，适合复杂任务' }
@@ -19,21 +18,16 @@ const MODELS = [
 
 const router = useRouter()
 const { messages, sending, modelId, send, stop, clear } = useChat()
-
 const user = getUser()
 
-/* ---------- 主题切换 ---------- */
 const theme = ref(currentTheme())
 function toggleTheme() {
   theme.value = theme.value === 'dark' ? 'light' : 'dark'
   applyTheme(theme.value)
 }
 
-/* ---------- 待办面板 ---------- */
 const panelOpen = ref(false)
 const panelRef = ref(null)
-
-/* ---------- 手机端「更多」菜单 ---------- */
 const moreOpen = ref(false)
 const moreRoot = ref(null)
 
@@ -41,15 +35,15 @@ function toggleMore() {
   moreOpen.value = !moreOpen.value
 }
 
-function onDocClick(e) {
-  if (moreRoot.value && !moreRoot.value.contains(e.target)) moreOpen.value = false
+function onDocClick(event) {
+  if (moreRoot.value && !moreRoot.value.contains(event.target)) moreOpen.value = false
 }
 
 onMounted(() => document.addEventListener('click', onDocClick))
 onBeforeUnmount(() => document.removeEventListener('click', onDocClick))
 
-function selectMobileModel(m) {
-  modelId.value = m.id
+function selectMobileModel(model) {
+  modelId.value = model.id
   moreOpen.value = false
 }
 
@@ -72,18 +66,16 @@ function clearAndClose() {
   moreOpen.value = false
 }
 
-/* ---------- 退出登录 ---------- */
 async function logout() {
   try {
     await logoutApi()
   } catch {
-    /* 忽略，本地登出优先 */
+    // 本地登出优先
   }
   clearAuth()
   router.push({ name: 'login' })
 }
 
-/* ---------- 滚动控制 ---------- */
 const chatEl = ref(null)
 const atBottom = ref(true)
 
@@ -115,274 +107,167 @@ watch(lastContent, () => {
   if (atBottom.value) scrollToBottom(false)
 })
 
-/* ---------- 发送 ---------- */
 async function handleSend(text) {
   atBottom.value = true
   scrollToBottom(false)
   await send(text)
-  // 聊天里可能新增/完成了待办，同步刷新侧栏
   panelRef.value?.refresh()
 }
 </script>
 
 <template>
-  <div class="app">
-    <header class="topbar">
-      <div class="brand">
-        <div class="brand-logo">
-          <svg viewBox="0 0 24 24" fill="currentColor">
-            <path
-              d="M12 2.5l2.1 6.4 6.4 2.1-6.4 2.1L12 19.5l-2.1-6.4L3.5 11l6.4-2.1L12 2.5z"
-            />
-            <path
-              d="M19 3l.7 2.3L22 6l-2.3.7L19 9l-.7-2.3L16 6l2.3-.7L19 3z"
-              opacity=".7"
-            />
-          </svg>
+  <div class="app chat-app">
+    <aside class="app-sidebar desktop-shell">
+      <div class="sidebar-brand">
+        <div class="sidebar-mark">
+          <img src="/brand/cowhorse-glyph-256.png" alt="Cowhourse Legend" />
         </div>
-        <div class="brand-text">
-          <span class="brand-name">SWAG Agent</span>
-          <span class="brand-tag">{{ user?.displayName || user?.username || '未登录' }}</span>
+        <div class="sidebar-wordmark">
+          <strong>COWHOURSE</strong>
+          <span>LEGEND / 牛马传奇</span>
         </div>
       </div>
 
-      <div class="topbar-actions">
-        <button class="nav-btn desktop-only" @click="router.push({ name: 'sites' })">常用网站</button>
-        <button class="nav-btn desktop-only" @click="router.push({ name: 'stats' })">统计</button>
+      <button class="new-session" type="button" @click="clear">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+          <path d="M12 5v14M5 12h14" />
+        </svg>
+        <span>新建会话</span>
+      </button>
 
-        <ModelSelector class="desktop-only" :model-id="modelId" :models="MODELS" @select="selectModel" />
+      <div class="sidebar-section">
+        <div class="sidebar-label">WORKSPACE</div>
+        <nav class="sidebar-nav" aria-label="主导航">
+          <button class="sidebar-link active" type="button">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <path d="M5 5h14v11H9l-4 4V5Z" />
+            </svg>
+            <span>智能对话</span>
+            <i></i>
+          </button>
+          <button class="sidebar-link" type="button" @click="panelOpen = true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <path d="M8 6h12M8 12h12M8 18h12M3.5 6h.01M3.5 12h.01M3.5 18h.01" />
+            </svg>
+            <span>今日待办</span>
+          </button>
+          <button class="sidebar-link" type="button" @click="goSites">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <circle cx="12" cy="12" r="8.5" />
+              <path d="M3.5 12h17M12 3.5c2.2 2.4 3.3 5.2 3.3 8.5S14.2 18.1 12 20.5C9.8 18.1 8.7 15.3 8.7 12S9.8 5.9 12 3.5Z" />
+            </svg>
+            <span>常用网站</span>
+          </button>
+          <button class="sidebar-link" type="button" @click="goStats">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <path d="M4 19V9M10 19V5M16 19v-7M22 19H2" />
+            </svg>
+            <span>效率统计</span>
+          </button>
+        </nav>
+      </div>
 
-        <button
-          class="icon-btn"
-          :class="{ active: panelOpen }"
-          title="今日待办"
-          @click="panelOpen = !panelOpen"
-        >
-          <svg
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          >
-            <path d="M9 6h11" />
-            <path d="M9 12h11" />
-            <path d="M9 18h11" />
-            <path d="m3 6 1.5 1.5L7 5" />
-            <path d="m3 12 1.5 1.5L7 11" />
-            <path d="m3 18 1.5 1.5L7 17" />
+      <div class="sidebar-spacer"></div>
+
+      <div class="system-card">
+        <div class="system-card-head">
+          <span class="status-pulse"></span>
+          SYSTEM ONLINE
+        </div>
+        <p>DeepSeek runtime 已连接</p>
+        <div class="system-meter"><span></span></div>
+      </div>
+
+      <div class="sidebar-user">
+        <div class="user-avatar">{{ (user?.displayName || user?.username || 'U').slice(0, 1).toUpperCase() }}</div>
+        <div class="user-copy">
+          <strong>{{ user?.displayName || user?.username || '未登录' }}</strong>
+          <span>LEGEND MEMBER</span>
+        </div>
+        <button type="button" title="退出登录" @click="logout">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <path d="M9 5H5v14h4M14 8l4 4-4 4M18 12H8" />
           </svg>
         </button>
+      </div>
+    </aside>
 
-        <button
-          class="icon-btn desktop-only"
-          title="清空对话"
-          :disabled="!messages.length"
-          @click="clear"
-        >
-          <svg
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          >
-            <path d="M3 6h18" />
-            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
-            <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-          </svg>
-        </button>
-
-        <button class="icon-btn" title="切换主题" @click="toggleTheme">
-          <svg
-            v-if="theme === 'dark'"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          >
-            <circle cx="12" cy="12" r="4" />
-            <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41" />
-          </svg>
-          <svg
-            v-else
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          >
-            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
-          </svg>
-        </button>
-
-        <button class="icon-btn desktop-only" title="退出登录" @click="logout">
-          <svg
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          >
-            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-            <path d="m16 17 5-5-5-5" />
-            <path d="M21 12H9" />
-          </svg>
-        </button>
-
-        <!-- 手机端「更多」菜单 -->
-        <div ref="moreRoot" class="more-root">
-          <button
-            class="icon-btn mobile-more"
-            :class="{ active: moreOpen }"
-            title="更多"
-            @click="toggleMore"
-          >
-            <svg
-              viewBox="0 0 24 24"
-              fill="currentColor"
-            >
-              <circle cx="12" cy="5" r="1.8" />
-              <circle cx="12" cy="12" r="1.8" />
-              <circle cx="12" cy="19" r="1.8" />
+    <section class="workspace">
+      <header class="workspace-bar">
+        <div class="mobile-brand">
+          <img src="/brand/cowhorse-glyph-256.png" alt="" />
+          <strong>COWHOURSE</strong>
+        </div>
+        <div class="workspace-title desktop-shell">
+          <span>COWHOURSE LEGEND</span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="m9 18 6-6-6-6" /></svg>
+          <strong>{{ messages.length ? '当前会话' : '新任务' }}</strong>
+        </div>
+        <div class="workspace-actions">
+          <div class="preview-badge desktop-shell"><span></span>LIVE</div>
+          <ModelSelector class="desktop-shell" :model-id="modelId" :models="MODELS" @select="selectModel" />
+          <button class="work-icon" type="button" title="切换主题" @click="toggleTheme">
+            <svg v-if="theme === 'dark'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <circle cx="12" cy="12" r="3.5" /><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M6.3 17.7l-1.4 1.4M19.1 4.9l-1.4 1.4" />
+            </svg>
+            <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <path d="M20.5 14.1A8.5 8.5 0 0 1 9.9 3.5a8.5 8.5 0 1 0 10.6 10.6Z" />
             </svg>
           </button>
 
-          <div v-if="moreOpen" class="more-menu">
-            <div class="more-label">模型</div>
-            <button
-              v-for="m in MODELS"
-              :key="m.id"
-              type="button"
-              class="model-item"
-              :class="{ active: m.id === modelId }"
-              @click="selectMobileModel(m)"
-            >
-              <div class="model-item-main">
-                <div class="model-item-name">{{ m.name }}</div>
-                <div class="model-item-desc">{{ m.desc }}</div>
-              </div>
-              <span v-if="m.id === modelId" class="model-item-check">
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2.4"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                >
-                  <path d="M20 6 9 17l-5-5" />
-                </svg>
-              </span>
+          <div ref="moreRoot" class="more-root mobile-shell">
+            <button class="work-icon" type="button" title="更多" @click="toggleMore">
+              <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.6" /><circle cx="12" cy="12" r="1.6" /><circle cx="12" cy="19" r="1.6" /></svg>
             </button>
-
-            <div class="more-sep"></div>
-
-            <button type="button" class="more-action" @click="goSites">
-              <svg
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
+            <div v-if="moreOpen" class="more-menu">
+              <div class="more-label">模型</div>
+              <button
+                v-for="model in MODELS"
+                :key="model.id"
+                type="button"
+                class="model-item"
+                :class="{ active: model.id === modelId }"
+                @click="selectMobileModel(model)"
               >
-                <circle cx="12" cy="12" r="9" />
-                <path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18" />
-              </svg>
-              常用网站
-            </button>
-
-            <button type="button" class="more-action" @click="goStats">
-              <svg
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              >
-                <path d="M3 3v18h18" />
-                <path d="M8 17v-5M13 17V7M18 17v-8" />
-              </svg>
-              统计
-            </button>
-
-            <button type="button" class="more-action" :disabled="!messages.length" @click="clearAndClose">
-              <svg
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              >
-                <path d="M3 6h18" />
-                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
-                <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-              </svg>
-              清空对话
-            </button>
-
-            <button type="button" class="more-action danger" @click="logout">
-              <svg
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              >
-                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-                <path d="m16 17 5-5-5-5" />
-                <path d="M21 12H9" />
-              </svg>
-              退出登录
-            </button>
+                <div class="model-item-main">
+                  <div class="model-item-name">{{ model.name }}</div>
+                  <div class="model-item-desc">{{ model.desc }}</div>
+                </div>
+              </button>
+              <div class="more-sep"></div>
+              <button type="button" class="more-action" @click="panelOpen = true; moreOpen = false">今日待办</button>
+              <button type="button" class="more-action" @click="goSites">常用网站</button>
+              <button type="button" class="more-action" @click="goStats">效率统计</button>
+              <button type="button" class="more-action" :disabled="!messages.length" @click="clearAndClose">清空对话</button>
+              <button type="button" class="more-action danger" @click="logout">退出登录</button>
+            </div>
           </div>
         </div>
-      </div>
-    </header>
+      </header>
 
-    <main class="chat" ref="chatEl" @scroll="onScroll">
-      <EmptyState v-if="!messages.length" @select="handleSend" />
-      <div v-else class="messages">
-        <ChatMessage v-for="m in messages" :key="m.id" :message="m" />
-      </div>
-    </main>
+      <main ref="chatEl" class="chat" @scroll="onScroll">
+        <EmptyState v-if="!messages.length" @select="handleSend" />
+        <div v-else class="messages">
+          <ChatMessage v-for="message in messages" :key="message.id" :message="message" />
+        </div>
+      </main>
 
-    <button
-      v-if="!atBottom && messages.length"
-      class="scroll-fab"
-      title="回到底部"
-      @click="scrollToBottom(true)"
-    >
-      <svg
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="2"
-        stroke-linecap="round"
-        stroke-linejoin="round"
+      <button
+        v-if="!atBottom && messages.length"
+        class="scroll-fab"
+        title="回到底部"
+        @click="scrollToBottom(true)"
       >
-        <path d="M12 5v14M19 12l-7 7-7-7" />
-      </svg>
-    </button>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 5v14M19 12l-7 7-7-7" /></svg>
+      </button>
 
-    <footer class="composer">
-      <div class="composer-inner">
-        <ChatInput :sending="sending" @send="handleSend" @stop="stop" />
-        <p class="composer-hint">
-          直接告诉我要做什么，例如「下午3点开会，写周报，买牛奶」；做完再说「xxx 做完了」。
-        </p>
-      </div>
-    </footer>
+      <footer class="composer">
+        <div class="composer-inner">
+          <ChatInput :sending="sending" @send="handleSend" @stop="stop" />
+          <p class="composer-hint">Cowhourse Legend 可能会犯错。重要信息请再次核对。</p>
+        </div>
+      </footer>
+    </section>
 
     <TodoPanel ref="panelRef" :open="panelOpen" @close="panelOpen = false" />
   </div>

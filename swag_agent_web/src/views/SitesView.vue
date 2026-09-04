@@ -498,8 +498,15 @@ onUnmounted(() => {
             <span class="folder-row-count">{{ library.total }}</span>
           </button>
 
-          <button class="folder-row root" :class="{ active: unclassifiedOnly }"
-                  @click="selectUnclassified">
+          <div class="folder-tree-sep"></div>
+
+          <button
+            class="folder-row"
+            :class="{ active: unclassifiedOnly }"
+            :style="{ paddingLeft: 12 + 'px' }"
+            @click="selectUnclassified"
+          >
+            <span class="folder-chevron"></span>
             <span class="folder-row-icon">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                    stroke-linecap="round" stroke-linejoin="round">
@@ -830,6 +837,12 @@ onUnmounted(() => {
   text-align: center;
   color: var(--text-muted);
   font-size: 12.5px;
+}
+
+.folder-tree-sep {
+  height: 1px;
+  margin: 7px 2px;
+  background: var(--border);
 }
 
 .folder-row {
@@ -1415,6 +1428,9 @@ onUnmounted(() => {
   .folder-tree-empty {
     white-space: nowrap;
     padding: 10px;
+  }
+  .folder-tree-sep {
+    display: none;
   }
   .folder-row {
     flex: none;

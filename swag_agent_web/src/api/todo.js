@@ -1,7 +1,12 @@
 import { api } from './http'
 
 export const getToday = () => api('/todo/today')
+export const getTodos = (from, to) => {
+  const q = new URLSearchParams({ from, to })
+  return api(`/todo?${q}`)
+}
 export const createTodo = (payload) => api('/todo', { method: 'POST', body: payload })
+export const updateTodo = (id, payload) => api(`/todo/${id}`, { method: 'PATCH', body: payload })
 export const completeTodo = (id) => api(`/todo/${id}/complete`, { method: 'PATCH' })
 export const deferTodo = (id, newDate) =>
   api(`/todo/${id}/defer`, { method: 'PATCH', body: { newDate } })

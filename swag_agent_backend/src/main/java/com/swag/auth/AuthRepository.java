@@ -23,12 +23,16 @@ public class AuthRepository {
         this.jdbc = jdbc;
     }
 
+    private static final String USER_COLUMNS =
+            "id, username, password_hash, display_name, role, created_at";
+
     private static final RowMapper<AppUserDO> USER_MAPPER = (rs, i) -> {
         AppUserDO user = new AppUserDO();
         user.setId(rs.getLong("id"));
         user.setUsername(rs.getString("username"));
         user.setPasswordHash(rs.getString("password_hash"));
         user.setDisplayName(rs.getString("display_name"));
+        user.setRole(rs.getString("role"));
         user.setCreatedAt(rs.getTimestamp("created_at").toLocalDateTime());
         return user;
     };
@@ -44,8 +48,7 @@ public class AuthRepository {
 
     public Optional<AppUserDO> findByUsername(String username) {
         List<AppUserDO> list = jdbc.query(
-                "SELECT id, username, password_hash, display_name, created_at"
-                        + " FROM app_user WHERE username = :username",
+                "SELECT " + USER_COLUMNS + " FROM app_user WHERE username = :username",
                 new MapSqlParameterSource("username", username),
                 USER_MAPPER);
         return list.stream().findFirst();
@@ -53,28 +56,49 @@ public class AuthRepository {
 
     public Optional<AppUserDO> findById(Long id) {
         List<AppUserDO> list = jdbc.query(
-                "SELECT id, username, password_hash, display_name, created_at"
-                        + " FROM app_user WHERE id = :id",
+                "SELECT " + USER_COLUMNS + " FROM app_user WHERE id = :id",
                 new MapSqlParameterSource("id", id),
                 USER_MAPPER);
         return list.stream().findFirst();
     }
 
+    public List<AppUserDO> findAllOrderByCreatedDesc() {
+        return jdbc.query(
+                "SELECT " + USER_COLUMNS + " FROM app_user ORDER BY created_at DESC, id DESC",
+                USER_MAPPER);
+    }
+
     public AppUserDO insert(AppUserDO user) {
         KeyHolder keyHolder = new GeneratedKeyHolder();
         jdbc.update("""
-                        INSERT INTO app_user (username, password_hash, display_name, created_at)
-                        VALUES (:username, :passwordHash, :displayName, :createdAt)
+                        INSERT INTO app_user (username, password_hash, display_name, role, created_at)
+                        VALUES (:username, :passwordHash, :displayName, :role, :createdAt)
                         """,
                 new MapSqlParameterSource()
                         .addValue("username", user.getUsername())
                         .addValue("passwordHash", user.getPasswordHash())
                         .addValue("displayName", user.getDisplayName())
+                        .addValue("role", user.getRole())
                         .addValue("createdAt", Timestamp.valueOf(user.getCreatedAt())),
                 keyHolder,
                 new String[]{"id"});
         user.setId(keyHolder.getKey().longValue());
         return user;
+    }
+
+    public void updateRole(Long id, String role) {
+        jdbc.update("UPDATE app_user SET role = :role WHERE id = :id",
+                new MapSqlParameterSource()
+                        .addValue("role", role)
+                        .addValue("id", id));
+    }
+
+    public long countAdmins() {
+        Long count = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM app_user WHERE role = 'ADMIN'",
+                new MapSqlParameterSource(),
+                Long.class);
+        return count == null ? 0 : count;
     }
 
     public void insertToken(AuthTokenDO token) {

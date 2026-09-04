@@ -13,5 +13,7 @@ public class AppUserDO {
     private String username;
     private String passwordHash;
     private String displayName;
+    /** 角色：ADMIN / USER。 */
+    private String role;
     private LocalDateTime createdAt;
 }

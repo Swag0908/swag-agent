@@ -106,13 +106,13 @@ public class UserMemoryRepository {
         return affected > 0;
     }
 
-    /** 开关缺省视为开启。 */
+    /** 开关缺省视为开启；新用户尚无设置行时返回 true（不能 queryForObject，空结果会抛异常）。 */
     public boolean isEnabled(Long userId) {
-        Integer value = jdbc.queryForObject(
+        List<Integer> rows = jdbc.query(
                 "SELECT enabled FROM chat_user_memory_setting WHERE user_id = :userId",
                 new MapSqlParameterSource("userId", userId),
-                Integer.class);
-        return value == null || value == 1;
+                (rs, rowNum) -> rs.getInt("enabled"));
+        return rows.isEmpty() || rows.get(0) == 1;
     }
 
     public void setEnabled(Long userId, boolean enabled, LocalDateTime now) {

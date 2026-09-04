@@ -3,16 +3,19 @@ package com.swag.memory;
 import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.stereotype.Repository;
 
-import javax.sql.DataSource;
 import java.util.List;
 
 /**
  * 用户级记忆的向量副本（pgvector，与 MySQL 本体按 memory_id 关联）。
  * 供跨会话语义召回 top-k 使用；若 PG/Ollama 不可用，服务层会自动降级为「最近 N 条」。
+ * <p>
+ * 注意：PG 连接在本类内部自建，**不得**把 PG DataSource 注册为 Spring Bean，
+ * 否则会破坏主 MySQL 数据源的自动配置（详见 PgVectorDataSourceConfiguration 注释）。
  */
 @Repository
 public class UserMemoryVectorRepository {
@@ -21,7 +24,15 @@ public class UserMemoryVectorRepository {
 
     private final JdbcTemplate pg;
 
-    public UserMemoryVectorRepository(@Qualifier("pgVectorDataSource") DataSource dataSource) {
+    public UserMemoryVectorRepository(
+            @Value("${app.pgvector.datasource.url}") String url,
+            @Value("${app.pgvector.datasource.username}") String username,
+            @Value("${app.pgvector.datasource.password}") String password) {
+        DriverManagerDataSource dataSource = new DriverManagerDataSource();
+        dataSource.setDriverClassName("org.postgresql.Driver");
+        dataSource.setUrl(url);
+        dataSource.setUsername(username);
+        dataSource.setPassword(password);
         this.pg = new JdbcTemplate(dataSource);
     }
 

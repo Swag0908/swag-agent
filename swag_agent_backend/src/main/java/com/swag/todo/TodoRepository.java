@@ -99,6 +99,18 @@ public class TodoRepository {
                 ITEM_MAPPER);
     }
 
+    public List<TodoItemDO> listByDateRange(Long userId, LocalDate from, LocalDate to) {
+        return jdbc.query(
+                "SELECT " + ITEM_COLUMNS + " FROM todo_item"
+                        + " WHERE user_id = :userId AND due_date BETWEEN :from AND :to"
+                        + " ORDER BY due_date, (due_time IS NULL), due_time, id",
+                new MapSqlParameterSource()
+                        .addValue("userId", userId)
+                        .addValue("from", Date.valueOf(from))
+                        .addValue("to", Date.valueOf(to)),
+                ITEM_MAPPER);
+    }
+
     public List<TodoItemDO> listAll(Long userId) {
         return jdbc.query(
                 "SELECT " + ITEM_COLUMNS + " FROM todo_item"
@@ -132,6 +144,17 @@ public class TodoRepository {
                         .addValue("updatedAt", Timestamp.valueOf(updatedAt)));
     }
 
+    public void update(TodoItemDO item) {
+        jdbc.update("""
+                        UPDATE todo_item
+                        SET title = :title, note = :note, due_date = :dueDate,
+                            due_time = :dueTime, updated_at = :updatedAt
+                        WHERE id = :id AND user_id = :userId
+                        """,
+                baseParams(item)
+                        .addValue("id", item.getId()));
+    }
+
     public void delete(Long id, Long userId) {
         jdbc.update("DELETE FROM todo_item WHERE id = :id AND user_id = :userId",
                 new MapSqlParameterSource().addValue("id", id).addValue("userId", userId));
@@ -158,7 +181,7 @@ public class TodoRepository {
 
     public int countCompleted(Long userId, LocalDate date) {
         return count("SELECT COUNT(*) FROM todo_item"
-                + " WHERE user_id = :userId AND status = 'DONE' AND DATE(completed_at) = :date",
+                + " WHERE user_id = :userId AND status = 'DONE' AND due_date = :date",
                 userId, date);
     }
 
@@ -166,15 +189,11 @@ public class TodoRepository {
         return count("""
                         SELECT COUNT(*) FROM todo_item i
                         WHERE i.user_id = :userId AND i.due_date = :date AND i.status = 'TODO'
-                          AND NOT EXISTS (
-                              SELECT 1 FROM todo_defer_log d
-                              WHERE d.item_id = i.id AND d.from_date = :date
-                          )
                         """, userId, date);
     }
 
     public int countDeferred(Long userId, LocalDate date) {
-        return count("SELECT COUNT(*) FROM todo_defer_log"
+        return count("SELECT COUNT(DISTINCT item_id) FROM todo_defer_log"
                 + " WHERE user_id = :userId AND from_date = :date", userId, date);
     }
 
@@ -228,6 +247,8 @@ public class TodoRepository {
                                deferred_count, completion_rate
                         FROM todo_daily_stat
                         WHERE user_id = :userId AND stat_date BETWEEN :from AND :to
+                          AND (created_count > 0 OR completed_count > 0 OR pending_count > 0
+                               OR deferred_count > 0)
                         ORDER BY stat_date
                         """,
                 new MapSqlParameterSource()
@@ -240,20 +261,6 @@ public class TodoRepository {
     public List<Long> listActiveUserIds() {
         return jdbc.queryForList(
                 "SELECT DISTINCT user_id FROM todo_item", new MapSqlParameterSource(), Long.class);
-    }
-
-    public void deleteDueBefore(Long userId, LocalDate cutoff) {
-        jdbc.update("DELETE FROM todo_item WHERE user_id = :userId AND due_date < :cutoff",
-                new MapSqlParameterSource()
-                        .addValue("userId", userId)
-                        .addValue("cutoff", Date.valueOf(cutoff)));
-    }
-
-    public void deleteDeferLogsBefore(Long userId, LocalDate cutoff) {
-        jdbc.update("DELETE FROM todo_defer_log WHERE user_id = :userId AND from_date < :cutoff",
-                new MapSqlParameterSource()
-                        .addValue("userId", userId)
-                        .addValue("cutoff", Date.valueOf(cutoff)));
     }
 
     private MapSqlParameterSource baseParams(TodoItemDO item) {

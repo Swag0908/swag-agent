@@ -45,7 +45,7 @@ public class TodoService {
         item.setCreatedAt(now);
         item.setUpdatedAt(now);
         TodoItemDO created = repository.insert(item);
-        statistics.refreshToday(userId);
+        statistics.refresh(userId, item.getDueDate());
         return created;
     }
 
@@ -57,6 +57,37 @@ public class TodoService {
         return repository.listByDate(userId, date);
     }
 
+    public List<TodoItemDO> listByDateRange(Long userId, LocalDate from, LocalDate to) {
+        if (from == null || to == null || from.isAfter(to)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "日期范围不正确");
+        }
+        if (from.plusYears(1).isBefore(to)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "单次最多查询一年待办");
+        }
+        return repository.listByDateRange(userId, from, to);
+    }
+
+    @Transactional
+    public TodoItemDO update(Long userId, String idOrTitle, String title, String note,
+                             LocalDate dueDate, LocalTime dueTime) {
+        if (title == null || title.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "待办标题不能为空");
+        }
+        if (dueDate == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "请选择待办日期");
+        }
+        TodoItemDO item = resolve(userId, idOrTitle);
+        LocalDate previousDate = item.getDueDate();
+        item.setTitle(title.trim());
+        item.setNote(note == null || note.isBlank() ? null : note.trim());
+        item.setDueDate(dueDate);
+        item.setDueTime(dueTime);
+        item.setUpdatedAt(LocalDateTime.now(TodoDates.ZONE));
+        repository.update(item);
+        refreshDates(userId, previousDate, dueDate);
+        return item;
+    }
+
     @Transactional
     public TodoItemDO complete(Long userId, String idOrTitle) {
         TodoItemDO item = resolve(userId, idOrTitle);
@@ -65,7 +96,7 @@ public class TodoService {
         item.setStatus("DONE");
         item.setCompletedAt(now);
         item.setUpdatedAt(now);
-        statistics.refreshToday(userId);
+        statistics.refresh(userId, item.getDueDate());
         return item;
     }
 
@@ -76,12 +107,15 @@ public class TodoService {
         }
         TodoItemDO item = resolve(userId, idOrTitle);
         LocalDate from = item.getDueDate();
+        if (!newDate.isAfter(from)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "延期日期必须晚于当前日期");
+        }
         LocalDateTime now = LocalDateTime.now(TodoDates.ZONE);
         repository.updateDueDate(item.getId(), userId, newDate, now);
         repository.insertDeferLog(item.getId(), userId, from, newDate, now);
         item.setDueDate(newDate);
         item.setUpdatedAt(now);
-        statistics.refreshToday(userId);
+        refreshDates(userId, from, newDate);
         return item;
     }
 
@@ -89,12 +123,32 @@ public class TodoService {
     public TodoItemDO delete(Long userId, String idOrTitle) {
         TodoItemDO item = resolve(userId, idOrTitle);
         repository.delete(item.getId(), userId);
-        statistics.refreshToday(userId);
+        statistics.refresh(userId, item.getDueDate());
         return item;
     }
 
     public List<TodoDailyStatDO> stats(Long userId, LocalDate from, LocalDate to) {
+        if (from == null || to == null || from.isAfter(to)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "日期范围不正确");
+        }
+        if (from.plusYears(1).isBefore(to)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "单次最多查询一年统计");
+        }
+        LocalDate lastHistoricalDay = to.isBefore(TodoDates.today())
+                ? to : TodoDates.today().minusDays(1);
+        for (LocalDate date = from; !date.isAfter(lastHistoricalDay); date = date.plusDays(1)) {
+            statistics.refresh(userId, date);
+        }
         return repository.listDailyStats(userId, from, to);
+    }
+
+    private void refreshDates(Long userId, LocalDate first, LocalDate second) {
+        if (first != null) {
+            statistics.refresh(userId, first);
+        }
+        if (second != null && !second.equals(first)) {
+            statistics.refresh(userId, second);
+        }
     }
 
     /**

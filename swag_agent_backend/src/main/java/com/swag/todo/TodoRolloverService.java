@@ -6,7 +6,8 @@ import org.springframework.stereotype.Service;
 import java.time.LocalDate;
 
 /**
- * 每日结算：把「昨天」的待办汇总进按天统计，并清理超过一周的旧数据。
+ * 每日结算：把「昨天」的待办汇总进按天统计。
+ * 历史待办和延期记录会保留，供日历回顾使用。
  */
 @Service
 public class TodoRolloverService {
@@ -22,18 +23,11 @@ public class TodoRolloverService {
     }
 
     /**
-     * 每日 0 点结算最近 7 天（幂等，已结算的跳过），再清理超过一周的数据。
+     * 每日 0 点结算昨天。
      */
     @Scheduled(cron = "0 0 0 * * ?", zone = "Asia/Shanghai")
     public void scheduledRollover() {
-        LocalDate today = TodoDates.today();
-        for (int d = 1; d <= 7; d++) {
-            settleAll(today.minusDays(d));
-        }
-        for (Long userId : repository.listActiveUserIds()) {
-            repository.deleteDueBefore(userId, today.minusDays(7));
-            repository.deleteDeferLogsBefore(userId, today.minusDays(7));
-        }
+        settleAll(TodoDates.today().minusDays(1));
     }
 
     /**

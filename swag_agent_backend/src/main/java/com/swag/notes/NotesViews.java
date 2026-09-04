@@ -21,4 +21,8 @@ public final class NotesViews {
     /** 保存成功后的回执。 */
     public record SaveResult(String path, long size, long modified) {
     }
+
+    /** 回收站条目。kind: file | dir；deletedAt 为毫秒时间戳。 */
+    public record TrashView(String id, String originalPath, String name, String kind, long deletedAt) {
+    }
 }

@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
@@ -14,7 +15,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * 笔记服务的路径安全与基本读写测试。
+ * 笔记服务的读写、回收站、未分类与路径安全测试。
  */
 class NotesServiceTests {
 
@@ -59,10 +60,11 @@ class NotesServiceTests {
 
         NotesViews.Node root = service.tree(1L);
         assertEquals("dir", root.type());
-        assertEquals(2, root.children().size());
-        // 目录排在文件前
+        // 目录排前：a目录、未分类(默认) + b笔记.md
+        assertEquals(3, root.children().size());
         assertEquals("a目录", root.children().get(0).name());
-        assertEquals("b笔记.md", root.children().get(1).name());
+        assertEquals(NotesService.UNCLASSIFIED, root.children().get(1).name());
+        assertEquals("b笔记.md", root.children().get(2).name());
 
         NotesViews.Node dir = root.children().get(0);
         assertEquals(1, dir.children().size());
@@ -74,16 +76,129 @@ class NotesServiceTests {
     }
 
     @Test
-    void deleteAndRename() {
-        service.save(2L, "old.md", "内容");
-        service.createDir(2L, "子目录");
-        service.rename(2L, "old.md", "子目录/new.md");
+    void defaultUnclassifiedFolderSeeded() {
+        NotesViews.Node root = service.tree(99L);
+        assertTrue(root.children().stream().anyMatch(
+                n -> n.type().equals("dir") && n.name().equals(NotesService.UNCLASSIFIED)),
+                "每个用户默认应有「未分类」文件夹");
+    }
 
+    @Test
+    void renameMovesFileAndDir() {
+        service.createDir(2L, "子目录");
+        service.save(2L, "old.md", "内容");
+        service.rename(2L, "old.md", "子目录/new.md");
         assertEquals("内容", service.read(2L, "子目录/new.md").content());
         assertThrows(ResponseStatusException.class, () -> service.read(2L, "old.md"));
 
-        service.deleteFile(2L, "子目录/new.md");
-        assertThrows(ResponseStatusException.class, () -> service.read(2L, "子目录/new.md"));
+        service.createDir(2L, "folder");
+        service.save(2L, "folder/a.md", "a");
+        service.rename(2L, "folder", "子目录/moved");
+        assertEquals("a", service.read(2L, "子目录/moved/a.md").content());
+    }
+
+    // ---------- 回收站 ----------
+
+    @Test
+    void deleteFileGoesToTrashAndRestoresToOriginal() {
+        service.createDir(7L, "工作");
+        service.save(7L, "工作/周报.md", "内容");
+        service.deleteFile(7L, "工作/周报.md");
+
+        assertThrows(ResponseStatusException.class, () -> service.read(7L, "工作/周报.md"));
+        var trash = service.listTrash(7L);
+        assertEquals(1, trash.size());
+        assertEquals("file", trash.get(0).kind());
+        assertEquals("工作/周报.md", trash.get(0).originalPath());
+        assertEquals("周报.md", trash.get(0).name());
+
+        service.restore(7L, trash.get(0).id());
+        assertEquals("内容", service.read(7L, "工作/周报.md").content());
+        assertEquals(0, service.listTrash(7L).size());
+    }
+
+    @Test
+    void restoreFallsBackToUnclassifiedWhenParentMissing() {
+        service.createDir(7L, "老目录");
+        service.save(7L, "老目录/旧笔记.md", "v");
+        service.deleteFile(7L, "老目录/旧笔记.md");
+        // 把原目录也删掉（整体进回收站），让原目录不存在
+        service.deleteDirToTrash(7L, "老目录");
+
+        var trash = service.listTrash(7L);
+        NotesViews.TrashView fileItem = trash.stream()
+                .filter(t -> t.kind().equals("file")).findFirst().orElseThrow();
+        service.restore(7L, fileItem.id());
+
+        assertEquals("v", service.read(7L, "未分类/旧笔记.md").content());
+    }
+
+    @Test
+    void trashWholeFolderAndRestoreKeepsTree() {
+        service.createDir(7L, "项目/子");
+        service.save(7L, "项目/a.md", "a");
+        service.save(7L, "项目/子/b.md", "b");
+        service.deleteDirToTrash(7L, "项目");
+
+        NotesViews.Node root = service.tree(7L);
+        assertFalse(root.children().stream().anyMatch(n -> n.name().equals("项目")));
+        var trash = service.listTrash(7L);
+        assertEquals(1, trash.size());
+        assertEquals("dir", trash.get(0).kind());
+
+        service.restore(7L, trash.get(0).id());
+        assertEquals("a", service.read(7L, "项目/a.md").content());
+        assertEquals("b", service.read(7L, "项目/子/b.md").content());
+    }
+
+    @Test
+    void deleteDirFlattenMovesNotesToUnclassified() {
+        service.createDir(7L, "项目/子");
+        service.save(7L, "项目/a.md", "a");
+        service.save(7L, "项目/子/b.md", "b");
+        service.deleteDirFlatten(7L, "项目");
+
+        assertThrows(ResponseStatusException.class, () -> service.read(7L, "项目/a.md"));
+        assertEquals("a", service.read(7L, "未分类/a.md").content());
+        assertEquals("b", service.read(7L, "未分类/b.md").content());
+        assertEquals(0, service.listTrash(7L).size()); // 平铺模式不占用回收站
+    }
+
+    @Test
+    void flattenResolvesNameConflict() {
+        service.save(7L, "未分类/a.md", "旧的");
+        service.createDir(7L, "项目");
+        service.save(7L, "项目/a.md", "新的");
+        service.deleteDirFlatten(7L, "项目");
+
+        assertEquals("旧的", service.read(7L, "未分类/a.md").content());
+        assertEquals("新的", service.read(7L, "未分类/a (1).md").content());
+    }
+
+    @Test
+    void expiredTrashEntriesPurgedOnList() throws Exception {
+        service.save(7L, "旧笔记.md", "v");
+        service.deleteFile(7L, "旧笔记.md");
+
+        Path entryDir;
+        try (var stream = Files.list(tempDir.resolve("user-7").resolve(".trash"))) {
+            entryDir = stream.findFirst().orElseThrow();
+        }
+        long expired = System.currentTimeMillis() - 8L * 24 * 3600 * 1000;
+        Files.writeString(entryDir.resolve("entry.json"),
+                "originalPath=旧笔记.md\nkind=file\ndeletedAt=" + expired + "\n",
+                StandardCharsets.UTF_8);
+
+        assertTrue(service.listTrash(7L).isEmpty(), "过期条目应被自动清理");
+    }
+
+    @Test
+    void permanentDeleteRemovesEntry() {
+        service.save(7L, "x.md", "x");
+        service.deleteFile(7L, "x.md");
+        String id = service.listTrash(7L).get(0).id();
+        service.deleteTrashEntry(7L, id);
+        assertEquals(0, service.listTrash(7L).size());
     }
 
     // ---------- 路径穿越防护 ----------
@@ -94,12 +209,12 @@ class NotesServiceTests {
         assertBad(() -> service.save(3L, "a/../../escape.md", "x"));
         assertBad(() -> service.save(3L, "a//b.md", "x"));
         assertBad(() -> service.save(3L, "a/./b.md", "x"));
-        // 绝对路径按相对路径处理，仍必须落在用户目录内
         assertBad(() -> service.save(3L, "/etc/escape.md", "x"));
-        // Windows 分隔符与穿越组合同样拒绝
         assertBad(() -> service.save(3L, "..\\escape.md", "x"));
+        // 以点开头的保留段（回收站 .trash 等）不可通过普通接口访问
+        assertBad(() -> service.save(3L, ".trash/x.md", "x"));
+        assertBad(() -> service.save(3L, "工作/.hidden/x.md", "x"));
 
-        // 非法写入后，用户目录外不应产生任何文件
         assertFalse(Files.exists(tempDir.resolve("escape.md")));
         assertFalse(Files.exists(tempDir.resolve("user-3").resolve("escape.md")));
     }
@@ -107,22 +222,20 @@ class NotesServiceTests {
     @Test
     void rejectsNonMarkdownFileOperations() {
         assertBad(() -> service.save(4L, "note.txt", "x"));
-        assertBad(() -> service.deleteFile(4L, "note.md")); // 不存在返回 404，先建再删
+        assertBad(() -> service.deleteFile(4L, "note.md")); // 不存在返回 404
         service.save(4L, "ok.md", "x");
         assertBad(() -> service.rename(4L, "ok.md", "bad.txt"));
     }
 
     @Test
     void rejectsSymlinkEscape() throws Exception {
-        // 在用户目录外放一个目录，并在用户目录内做符号链接指向它
         Path outside = Files.createDirectory(tempDir.resolve("outside"));
         Path home = Files.createDirectories(tempDir.resolve("user-5"));
         try {
             Files.createSymbolicLink(home.resolve("link"), outside);
         }
         catch (UnsupportedOperationException | java.io.IOException e) {
-            // 平台不支持符号链接则跳过
-            return;
+            return; // 平台不支持符号链接则跳过
         }
 
         ResponseStatusException ex = assertThrows(ResponseStatusException.class,

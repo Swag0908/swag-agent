@@ -29,6 +29,9 @@ public class TodoController {
     public record CreateRequest(String title, String note, String dueDate, String dueTime) {
     }
 
+    public record UpdateRequest(String title, String note, String dueDate, String dueTime) {
+    }
+
     public record DeferRequest(String newDate) {
     }
 
@@ -75,6 +78,23 @@ public class TodoController {
         return ItemResponse.from(item);
     }
 
+    @GetMapping
+    public List<ItemResponse> range(@RequestParam String from, @RequestParam String to) {
+        LocalDate fromDate = requiredDate(from, "请提供开始日期");
+        LocalDate toDate = requiredDate(to, "请提供结束日期");
+        return service.listByDateRange(currentUser(), fromDate, toDate).stream()
+                .map(ItemResponse::from)
+                .toList();
+    }
+
+    @PatchMapping("/{id}")
+    public ItemResponse update(@PathVariable Long id, @RequestBody UpdateRequest request) {
+        TodoItemDO item = service.update(currentUser(), id.toString(), request.title(), request.note(),
+                requiredDate(request.dueDate(), "请选择待办日期"),
+                service.parseTime(request.dueTime()));
+        return ItemResponse.from(item);
+    }
+
     @PatchMapping("/{id}/complete")
     public ItemResponse complete(@PathVariable Long id) {
         return ItemResponse.from(service.complete(currentUser(), id.toString()));
@@ -108,5 +128,13 @@ public class TodoController {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "未登录");
         }
         return userId;
+    }
+
+    private LocalDate requiredDate(String value, String message) {
+        LocalDate parsed = service.parseDate(value, null);
+        if (parsed == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, message);
+        }
+        return parsed;
     }
 }

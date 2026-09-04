@@ -17,7 +17,7 @@ public class TodoItemDO {
     private String note;
     /** 目标日，默认创建当天；「延期」即修改该日期。 */
     private LocalDate dueDate;
-    /** 截止时间（可选，仅展示/排序）。 */
+    /** 当天的计划时间（可选）。 */
     private LocalTime dueTime;
     /** TODO / DONE。 */
     private String status;

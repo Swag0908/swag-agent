@@ -18,10 +18,6 @@ public class TodoStatisticsService {
         this.repository = repository;
     }
 
-    public void refreshToday(Long userId) {
-        refresh(userId, TodoDates.today());
-    }
-
     public void refresh(Long userId, LocalDate date) {
         int created = repository.countCreated(userId, date);
         int completed = repository.countCompleted(userId, date);

@@ -53,6 +53,22 @@ public class TodoTools {
         return "已记录待办 #" + item.getId() + " " + item.getTitle();
     }
 
+    @Tool(description = "修改已有待办的标题、备注、日期或时间。"
+            + " dueDate 格式 yyyy-MM-dd；dueTime 格式 HH:mm，不需要具体时间时留空")
+    public String updateTodo(
+            @ToolParam(description = "待办的 #id 或标题") String idOrTitle,
+            @ToolParam(description = "修改后的完整标题") String title,
+            @ToolParam(description = "修改后的备注，可为空") String note,
+            @ToolParam(description = "修改后的日期 yyyy-MM-dd") String dueDate,
+            @ToolParam(description = "修改后的时间 HH:mm，可为空") String dueTime,
+            ToolContext toolContext) {
+        TodoItemDO item = service.update(userId(toolContext), idOrTitle, title, note,
+                service.parseDate(dueDate, null), service.parseTime(dueTime));
+        return "已修改待办 #" + item.getId() + " " + item.getTitle()
+                + " → " + item.getDueDate()
+                + (item.getDueTime() == null ? "" : " " + item.getDueTime());
+    }
+
     @Tool(description = "把一条待办标记为已完成。idOrTitle 传 #id 或标题")
     public String completeTodo(
             @ToolParam(description = "待办的 #id 或标题") String idOrTitle,

@@ -5,3 +5,5 @@ export const listConversations = () => api('/chat/conversations')
 export const createConversation = (payload = {}) =>
   api('/chat/conversations', { method: 'POST', body: payload })
 export const getConversationMessages = (id) => api(`/chat/conversations/${id}/messages`)
+export const deleteConversation = (id) =>
+  api(`/chat/conversations/${id}`, { method: 'DELETE' })

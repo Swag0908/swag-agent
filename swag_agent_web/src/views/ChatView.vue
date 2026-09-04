@@ -32,6 +32,7 @@ const {
   stop,
   newConversation,
   openConversation,
+  deleteConversation,
   refreshConversations
 } = useChat()
 const user = ref(getUser())
@@ -127,6 +128,16 @@ async function onSelectConversation(conv) {
   await openConversation(conv)
 }
 
+async function onDeleteConversation(conv) {
+  const title = conv?.title || '新对话'
+  if (!window.confirm(`确定删除会话「${title}」吗？删除后无法恢复。`)) return
+  try {
+    await deleteConversation(conv)
+  } catch (e) {
+    window.alert(e?.message || '删除会话失败')
+  }
+}
+
 async function logout() {
   try {
     await logoutApi()
@@ -211,6 +222,7 @@ async function handleSend(text) {
             :active-id="conversationId"
             empty-text="暂无历史会话"
             @select="onSelectConversation"
+            @delete="onDeleteConversation"
           />
         </div>
       </div>
@@ -399,6 +411,7 @@ async function handleSend(text) {
           :active-id="conversationId"
           empty-text="还没有历史会话"
           @select="onSelectConversation"
+          @delete="onDeleteConversation"
         />
       </div>
       <footer class="hist-foot">

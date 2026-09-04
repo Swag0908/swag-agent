@@ -3,7 +3,8 @@ import { streamChat } from '../api/chat'
 import {
   listConversations,
   createConversation,
-  getConversationMessages
+  getConversationMessages,
+  deleteConversation as deleteConversationApi
 } from '../api/conversations'
 
 let idSeq = 0
@@ -100,6 +101,21 @@ export function useChat() {
     }
   }
 
+  /** 删除会话并同步本地列表；删除当前会话后回到新会话草稿。 */
+  async function deleteConversation(conv) {
+    if (!conv || conv.id == null) return
+    const deletingActive = String(conv.id) === String(conversationId.value)
+    if (deletingActive && sending.value) {
+      throw new Error('请先停止当前回复，再删除这个会话')
+    }
+
+    await deleteConversationApi(conv.id)
+    conversations.value = conversations.value.filter(
+      (item) => String(item.id) !== String(conv.id)
+    )
+    if (deletingActive) newConversation()
+  }
+
   async function send(raw) {
     const text = String(raw ?? '').trim()
     if (!text || sending.value) return
@@ -193,6 +209,7 @@ export function useChat() {
     stop,
     newConversation,
     openConversation,
+    deleteConversation,
     refreshConversations
   }
 }

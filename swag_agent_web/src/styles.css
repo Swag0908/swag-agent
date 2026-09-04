@@ -2767,38 +2767,47 @@ button {
   color: var(--text-muted);
 }
 
-.conv-item {
+.conv-row {
   position: relative;
   width: 100%;
   min-height: 36px;
   display: flex;
   align-items: center;
-  gap: 9px;
-  padding: 6px 10px;
   color: var(--text-muted);
-  font-size: 12.5px;
-  text-align: left;
   border-radius: 6px;
   transition: color 0.16s ease, background 0.16s ease;
 }
 
-.conv-item:hover {
+.conv-row:hover {
   color: var(--text);
   background: var(--surface);
 }
 
-.conv-item.active {
+.conv-row.active {
   color: var(--text);
   background: var(--surface-2);
 }
 
-.conv-item.active::before {
+.conv-row.active::before {
   content: '';
   position: absolute;
   left: 0;
   width: 2px;
   height: 16px;
   background: var(--accent);
+}
+
+.conv-item {
+  flex: 1;
+  min-width: 0;
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 6px 4px 6px 10px;
+  color: inherit;
+  font-size: 12.5px;
+  text-align: left;
 }
 
 .conv-item-ic {
@@ -2817,10 +2826,45 @@ button {
 }
 
 .conv-item-title {
+  flex: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.conv-delete {
+  width: 30px;
+  height: 30px;
+  margin-right: 3px;
+  display: grid;
+  place-items: center;
+  flex: none;
+  color: var(--text-muted);
+  border-radius: 6px;
+  opacity: 0;
+  transition: color 0.16s ease, background 0.16s ease, opacity 0.16s ease;
+}
+
+.conv-row:hover .conv-delete,
+.conv-row:focus-within .conv-delete {
+  opacity: 1;
+}
+
+.conv-delete:hover {
+  color: var(--danger);
+  background: rgba(248, 113, 113, 0.12);
+}
+
+.conv-delete svg {
+  width: 15px;
+  height: 15px;
+}
+
+@media (hover: none) {
+  .conv-delete {
+    opacity: 1;
+  }
 }
 
 .conv-empty {

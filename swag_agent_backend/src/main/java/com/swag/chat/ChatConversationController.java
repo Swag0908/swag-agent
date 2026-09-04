@@ -2,6 +2,7 @@ package com.swag.chat;
 
 import com.swag.auth.UserContextHolder;
 import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -39,9 +40,11 @@ public class ChatConversationController {
     }
 
     private final ChatHistoryRepository repository;
+    private final ChatConversationService service;
 
-    public ChatConversationController(ChatHistoryRepository repository) {
+    public ChatConversationController(ChatHistoryRepository repository, ChatConversationService service) {
         this.repository = repository;
+        this.service = service;
     }
 
     @GetMapping
@@ -67,6 +70,13 @@ public class ChatConversationController {
         return repository.listMessages(id).stream()
                 .map(MessageResponse::from)
                 .toList();
+    }
+
+    @DeleteMapping("/{id}")
+    public void delete(@PathVariable Long id) {
+        if (!service.delete(currentUser(), id)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "会话不存在");
+        }
     }
 
     private Long currentUser() {

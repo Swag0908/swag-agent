@@ -9,6 +9,7 @@ import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.sql.Timestamp;
 import java.time.LocalDateTime;
@@ -169,5 +170,22 @@ public class ChatHistoryRepository {
                         + " WHERE conversation_id = :conversationId ORDER BY id",
                 new MapSqlParameterSource("conversationId", conversationId),
                 MESSAGE_MAPPER);
+    }
+
+    /** 删除当前用户的会话及其全部历史消息。 */
+    @Transactional
+    public boolean deleteConversation(Long id, Long userId) {
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("id", id)
+                .addValue("userId", userId);
+        int deleted = jdbc.update(
+                "DELETE FROM chat_conversation WHERE id = :id AND user_id = :userId",
+                params);
+        if (deleted == 0) {
+            return false;
+        }
+        jdbc.update("DELETE FROM chat_message WHERE conversation_id = :id AND user_id = :userId",
+                params);
+        return true;
     }
 }

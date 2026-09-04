@@ -6,7 +6,7 @@ const props = defineProps({
   activeId: { type: [Number, String, null], default: null },
   emptyText: { type: String, default: '还没有历史会话' }
 })
-defineEmits(['select'])
+defineEmits(['select', 'delete'])
 
 const DAY = 24 * 60 * 60 * 1000
 
@@ -40,22 +40,37 @@ const groups = computed(() => {
     <template v-if="groups.length">
       <section v-for="g in groups" :key="g.label" class="conv-group">
         <div class="conv-group-label">{{ g.label }}</div>
-        <button
+        <div
           v-for="c in g.items"
           :key="c.id"
-          type="button"
-          class="conv-item"
+          class="conv-row"
           :class="{ active: String(c.id) === String(activeId) }"
-          :title="c.title || '新对话'"
-          @click="$emit('select', c)"
         >
-          <span class="conv-item-ic">
+          <button
+            type="button"
+            class="conv-item"
+            :title="c.title || '新对话'"
+            @click="$emit('select', c)"
+          >
+            <span class="conv-item-ic">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                <path d="M5 5h14v11H9l-4 4V5Z" />
+              </svg>
+            </span>
+            <span class="conv-item-title">{{ c.title || '新对话' }}</span>
+          </button>
+          <button
+            type="button"
+            class="conv-delete"
+            :aria-label="`删除会话 ${c.title || '新对话'}`"
+            title="删除会话"
+            @click="$emit('delete', c)"
+          >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-              <path d="M5 5h14v11H9l-4 4V5Z" />
+              <path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 11v5M14 11v5" />
             </svg>
-          </span>
-          <span class="conv-item-title">{{ c.title || '新对话' }}</span>
-        </button>
+          </button>
+        </div>
       </section>
     </template>
     <p v-else class="conv-empty">{{ emptyText }}</p>

@@ -96,7 +96,6 @@ async function submit() {
         </button>
       </form>
 
-      <p class="auth-hint">预置管理员账号：swag / cgynhsy12345</p>
     </div>
   </div>
 </template>

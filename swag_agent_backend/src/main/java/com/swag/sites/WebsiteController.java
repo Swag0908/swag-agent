@@ -1,7 +1,10 @@
 package com.swag.sites;
 
 import com.swag.auth.UserContextHolder;
+import org.springframework.http.CacheControl;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -12,6 +15,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
+
+import java.util.Optional;
 
 /**
  * 常用网站 REST 接口，供「常用网站」页使用。
@@ -32,9 +37,11 @@ public class WebsiteController {
     }
 
     private final WebsiteService service;
+    private final WebsiteIconService iconService;
 
-    public WebsiteController(WebsiteService service) {
+    public WebsiteController(WebsiteService service, WebsiteIconService iconService) {
         this.service = service;
+        this.iconService = iconService;
     }
 
     @GetMapping
@@ -78,6 +85,26 @@ public class WebsiteController {
         return service.updateBookmark(
                 currentUser(), id, request.name(), request.url(), request.description(),
                 request.iconUrl(), request.folderId());
+    }
+
+    @GetMapping("/{id}/icon")
+    public ResponseEntity<byte[]> icon(@PathVariable Long id) {
+        Optional<WebsiteRepository.CachedIcon> icon = iconService.iconFor(currentUser(), id);
+        if (icon.isEmpty()) {
+            return ResponseEntity.notFound().build();
+        }
+        WebsiteRepository.CachedIcon value = icon.get();
+        MediaType contentType;
+        try {
+            contentType = MediaType.parseMediaType(value.contentType());
+        }
+        catch (IllegalArgumentException ignored) {
+            contentType = MediaType.APPLICATION_OCTET_STREAM;
+        }
+        return ResponseEntity.ok()
+                .contentType(contentType)
+                .cacheControl(CacheControl.noCache().cachePrivate())
+                .body(value.data());
     }
 
     @DeleteMapping("/{id}")

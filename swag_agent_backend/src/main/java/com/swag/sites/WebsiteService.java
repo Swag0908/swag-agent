@@ -14,6 +14,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 /**
@@ -147,12 +148,18 @@ public class WebsiteService {
         String cleanUrl = normalizeUrl(url);
         ensureFolder(userId, folderId);
         LocalDateTime now = LocalDateTime.now(ZONE);
+        String cleanIconUrl = cleanNullable(iconUrl);
+        boolean sourceChanged = !cleanUrl.equals(bookmark.getUrl())
+                || !Objects.equals(cleanIconUrl, bookmark.getIconUrl());
         repository.updateBookmark(id, userId, cleanName, cleanUrl,
-                cleanNullable(description), cleanNullable(iconUrl), folderId, now);
+                cleanNullable(description), cleanIconUrl, folderId, now);
+        if (sourceChanged) {
+            repository.clearCachedIcon(id, userId, now);
+        }
         bookmark.setName(cleanName);
         bookmark.setUrl(cleanUrl);
         bookmark.setDescription(cleanNullable(description));
-        bookmark.setIconUrl(cleanNullable(iconUrl));
+        bookmark.setIconUrl(cleanIconUrl);
         bookmark.setFolderId(folderId);
         bookmark.setUpdatedAt(now);
         return WebsiteViews.BookmarkView.from(bookmark);

@@ -145,6 +145,44 @@ public class WebsiteRepository {
         return list.stream().findFirst();
     }
 
+    /** Binary icon cache is deliberately read separately so normal bookmark lists stay small. */
+    public Optional<CachedIcon> findCachedIcon(Long id, Long userId) {
+        List<CachedIcon> list = jdbc.query("""
+                        SELECT icon_data, icon_content_type FROM website_bookmark
+                        WHERE id = :id AND user_id = :userId AND icon_data IS NOT NULL
+                        """,
+                new MapSqlParameterSource().addValue("id", id).addValue("userId", userId),
+                (rs, i) -> new CachedIcon(rs.getBytes("icon_data"), rs.getString("icon_content_type")));
+        return list.stream().findFirst();
+    }
+
+    public void storeCachedIcon(Long id, Long userId, byte[] data, String contentType,
+                                LocalDateTime updatedAt) {
+        jdbc.update("""
+                        UPDATE website_bookmark
+                        SET icon_data = :data, icon_content_type = :contentType, updated_at = :updatedAt
+                        WHERE id = :id AND user_id = :userId
+                        """,
+                new MapSqlParameterSource()
+                        .addValue("id", id)
+                        .addValue("userId", userId)
+                        .addValue("data", data)
+                        .addValue("contentType", contentType)
+                        .addValue("updatedAt", Timestamp.valueOf(updatedAt)));
+    }
+
+    public void clearCachedIcon(Long id, Long userId, LocalDateTime updatedAt) {
+        jdbc.update("""
+                        UPDATE website_bookmark
+                        SET icon_data = NULL, icon_content_type = NULL, updated_at = :updatedAt
+                        WHERE id = :id AND user_id = :userId
+                        """,
+                new MapSqlParameterSource()
+                        .addValue("id", id)
+                        .addValue("userId", userId)
+                        .addValue("updatedAt", Timestamp.valueOf(updatedAt)));
+    }
+
     public WebsiteBookmarkDO insertBookmark(WebsiteBookmarkDO bookmark) {
         KeyHolder keyHolder = new GeneratedKeyHolder();
         jdbc.update("""
@@ -218,5 +256,8 @@ public class WebsiteRepository {
                 .addValue("sortOrder", bookmark.getSortOrder())
                 .addValue("createdAt", Timestamp.valueOf(bookmark.getCreatedAt()))
                 .addValue("updatedAt", Timestamp.valueOf(bookmark.getUpdatedAt()));
+    }
+
+    public record CachedIcon(byte[] data, String contentType) {
     }
 }

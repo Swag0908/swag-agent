@@ -6,9 +6,14 @@ export function getToken() {
   return localStorage.getItem(TOKEN_KEY) || ''
 }
 
-export function setAuth({ token, userId, username, displayName }) {
+export function setAuth({ token, userId, username, displayName, role }) {
   localStorage.setItem(TOKEN_KEY, token)
-  localStorage.setItem(USER_KEY, JSON.stringify({ userId, username, displayName }))
+  localStorage.setItem(USER_KEY, JSON.stringify({ userId, username, displayName, role }))
+}
+
+export function setUser(patch) {
+  const current = getUser()
+  localStorage.setItem(USER_KEY, JSON.stringify({ ...current, ...patch }))
 }
 
 export function getUser() {

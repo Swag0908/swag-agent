@@ -9,6 +9,7 @@ const mode = ref('login') // 'login' | 'register'
 const username = ref('')
 const password = ref('')
 const displayName = ref('')
+const registerCode = ref('')
 const error = ref('')
 const loading = ref(false)
 
@@ -16,6 +17,10 @@ async function submit() {
   error.value = ''
   if (!username.value.trim() || !password.value) {
     error.value = '请填写用户名和密码'
+    return
+  }
+  if (mode.value === 'register' && !registerCode.value.trim()) {
+    error.value = '请填写管理员提供的注册码'
     return
   }
   loading.value = true
@@ -26,7 +31,8 @@ async function submit() {
         : await register({
             username: username.value.trim(),
             password: password.value,
-            displayName: displayName.value.trim()
+            displayName: displayName.value.trim(),
+            registerCode: registerCode.value.trim()
           })
     setAuth(res)
     router.push({ name: 'chat' })
@@ -77,6 +83,16 @@ async function submit() {
         <label v-if="mode === 'register'" class="field">
           <span>昵称（可选）</span>
           <input v-model="displayName" type="text" placeholder="显示名称" />
+        </label>
+
+        <label v-if="mode === 'register'" class="field">
+          <span>注册码</span>
+          <input
+            v-model="registerCode"
+            type="text"
+            autocomplete="off"
+            placeholder="向管理员索取注册码"
+          />
         </label>
 
         <label class="field">

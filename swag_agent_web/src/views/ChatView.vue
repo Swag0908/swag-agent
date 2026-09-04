@@ -9,9 +9,10 @@ import ModelSelector from '../components/ModelSelector.vue'
 import TodoPanel from '../components/TodoPanel.vue'
 import ConversationList from '../components/ConversationList.vue'
 import UserMemoryPanel from '../components/UserMemoryPanel.vue'
+import AdminPanel from '../components/AdminPanel.vue'
 import { currentTheme, applyTheme } from '../theme'
-import { clearAuth, getUser } from '../auth'
-import { logout as logoutApi } from '../api/auth'
+import { clearAuth, getUser, setUser } from '../auth'
+import { logout as logoutApi, me as meApi } from '../api/auth'
 
 const MODELS = [
   { id: 1, name: 'DeepSeek V4 Flash', desc: '快速响应，适合日常对话' },
@@ -33,7 +34,25 @@ const {
   openConversation,
   refreshConversations
 } = useChat()
-const user = getUser()
+const user = ref(getUser())
+const isAdmin = computed(() => user.value?.role === 'ADMIN')
+
+async function refreshUser() {
+  try {
+    const data = await meApi()
+    if (data?.userId) {
+      setUser({
+        userId: data.userId,
+        username: data.username,
+        displayName: data.displayName,
+        role: data.role
+      })
+      user.value = getUser()
+    }
+  } catch {
+    // 接口失败时沿用本地缓存（role 可能过期，下次登录会更新）
+  }
+}
 
 const theme = ref(currentTheme())
 function toggleTheme() {
@@ -44,6 +63,7 @@ function toggleTheme() {
 const panelOpen = ref(false)
 const panelRef = ref(null)
 const memoryOpen = ref(false)
+const adminOpen = ref(false)
 const histOpen = ref(false)
 const moreOpen = ref(false)
 const moreRoot = ref(null)
@@ -58,6 +78,7 @@ function onDocClick(event) {
 
 onMounted(async () => {
   document.addEventListener('click', onDocClick)
+  await refreshUser()
   await refreshConversations()
   // 优先恢复上次打开的会话；其次自动打开最近会话，避免每次都要重新输入相同问题
   if (conversationId.value == null) {
@@ -236,6 +257,13 @@ async function handleSend(text) {
             </svg>
             <span>效率统计</span>
           </button>
+          <button v-if="isAdmin" class="sidebar-link" type="button" @click="adminOpen = true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <path d="M12 3l7 3v5c0 4.4-2.9 7.9-7 9-4.1-1.1-7-4.6-7-9V6l7-3Z" />
+              <path d="M9.5 12.2l1.8 1.8 3.6-3.8" />
+            </svg>
+            <span>注册管理</span>
+          </button>
         </nav>
       </div>
 
@@ -317,6 +345,7 @@ async function handleSend(text) {
               <button type="button" class="more-action" @click="goSites">常用网站</button>
               <button type="button" class="more-action" @click="goNotes">Markdown 笔记</button>
               <button type="button" class="more-action" @click="goStats">效率统计</button>
+              <button v-if="isAdmin" type="button" class="more-action" @click="adminOpen = true; moreOpen = false">注册管理</button>
               <button type="button" class="more-action danger" @click="logout">退出登录</button>
             </div>
           </div>
@@ -379,5 +408,6 @@ async function handleSend(text) {
 
     <TodoPanel ref="panelRef" :open="panelOpen" @close="panelOpen = false" />
     <UserMemoryPanel :open="memoryOpen" @close="memoryOpen = false" />
+    <AdminPanel :open="adminOpen" @close="adminOpen = false" />
   </div>
 </template>

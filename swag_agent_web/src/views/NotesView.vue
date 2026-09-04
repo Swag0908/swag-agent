@@ -73,6 +73,114 @@ function toggleOpen(path) {
   openPaths.value = next
 }
 
+// ---------------- 移动（重命名/拖拽共用） ----------------
+async function moveEntry(from, to, isDir) {
+  // 若移动的是当前正在编辑的笔记（或其所在文件夹），先落盘再移动，避免丢内容
+  const affected =
+    currentPath.value === from ||
+    (isDir && !!currentPath.value && currentPath.value.startsWith(from + '/'))
+  if (affected) await flushSave()
+  await renameEntry(from, to)
+  await loadTree()
+  if (affected) {
+    const old = currentPath.value
+    if (old === from) await openNote(to)
+    else await openNote(to + old.slice(from.length))
+  } else {
+    ensureVisible(to)
+  }
+}
+
+// ---------------- 拖拽移动（笔记/文件夹 → 文件夹/根目录） ----------------
+const dragSource = ref(null) // { path, dir } 正在拖拽的条目
+const dragOverPath = ref('') // 当前高亮的可放置文件夹
+const treeRootActive = ref(false) // 拖到树空白处 = 移到根目录
+
+function canDropOn(row) {
+  const src = dragSource.value
+  if (!src || !row || !row.dir) return false
+  if (src.path === row.path) return false // 不能放进自己
+  if (src.dir && row.path.startsWith(src.path + '/')) return false // 不能放进自己子孙
+  if (parentOf(src.path) === row.path) return false // 本来就在该文件夹里
+  return true
+}
+
+function onRowDragStart(row, event) {
+  dragSource.value = { path: row.path, dir: !!row.dir }
+  dragOverPath.value = ''
+  if (event.dataTransfer) {
+    event.dataTransfer.effectAllowed = 'move'
+    event.dataTransfer.setData('text/plain', row.path)
+  }
+}
+
+function endDrag() {
+  dragSource.value = null
+  dragOverPath.value = ''
+}
+
+function onRowDragOver(row, event) {
+  if (!canDropOn(row)) return
+  event.preventDefault() // 只有允许放置时才阻止默认，激活 drop
+  if (event.dataTransfer) event.dataTransfer.dropEffect = 'move'
+  if (dragOverPath.value !== row.path) dragOverPath.value = row.path
+}
+
+function onRowDragLeave(row) {
+  if (dragOverPath.value === row.path) dragOverPath.value = ''
+}
+
+async function onRowDrop(row, event) {
+  event.preventDefault()
+  event.stopPropagation()
+  const src = dragSource.value
+  const allowed = !!src && canDropOn(row)
+  const targetPath = row.path
+  endDrag()
+  if (!allowed) return
+  const to = joinPath(targetPath, baseName(src.path))
+  try {
+    await moveEntry(src.path, to, src.dir)
+    toast(`已移动「${baseName(src.path)}」到「${targetPath || '根目录'}」`)
+  } catch (e) {
+    toast(e?.message || '移动失败')
+  }
+}
+
+// 拖到目录树空白处 = 移到根目录
+function onTreeDragOver(event) {
+  const src = dragSource.value
+  if (!src || dragOverPath.value) return
+  if (event.target?.closest?.('.tree-row')) return // 悬停在行上时不激活根目录落点
+  if (parentOf(src.path) === '') return // 本来就在根目录
+  event.preventDefault()
+  if (event.dataTransfer) event.dataTransfer.dropEffect = 'move'
+  treeRootActive.value = true
+}
+
+function onTreeDragLeave(event) {
+  // 只有离开整个 nav 时才取消；进入行区域由行内 dragOver 接管
+  if (!event.currentTarget.contains(event.relatedTarget)) {
+    treeRootActive.value = false
+  }
+}
+
+async function onTreeDrop(event) {
+  event.preventDefault()
+  treeRootActive.value = false
+  const src = dragSource.value
+  endDrag()
+  if (!src) return
+  if (parentOf(src.path) === '') return
+  const to = baseName(src.path)
+  try {
+    await moveEntry(src.path, to, src.dir)
+    toast(`已移动「${baseName(src.path)}」到根目录`)
+  } catch (e) {
+    toast(e?.message || '移动失败')
+  }
+}
+
 const rows = computed(() => {
   const q = (filter.value || '').trim().toLowerCase()
   const out = []
@@ -244,7 +352,7 @@ function onKeydown(e) {
 }
 
 // ---------------- 结构操作（新建/重命名/删除） ----------------
-const modal = ref(null) // { mode:'file'|'dir'|'rename', parent, from, hint }
+const modal = ref(null) // { mode:'file'|'dir'|'rename', parent, from, dir }
 const modalValue = ref('')
 const modalBusy = ref(false)
 const modalError = ref('')
@@ -264,6 +372,7 @@ function openRename(row) {
     mode: 'rename',
     parent: parentOf(row.path),
     from: row.path,
+    dir: !!row.dir,
     original: baseName(row.path)
   }
   modalValue.value = baseName(row.path)
@@ -298,16 +407,7 @@ async function submitModal() {
       await loadTree()
       ensureVisible(joinPath(m.parent, raw))
     } else if (m.mode === 'rename') {
-      await flushSave() // 先落盘再改名，避免旧路径上残留未保存内容
-      await renameEntry(m.from, joinPath(m.parent, raw))
-      const mapped = joinPath(m.parent, raw)
-      await loadTree()
-      if (currentPath.value === m.from || currentPath.value?.startsWith(m.from + '/')) {
-        const old = currentPath.value
-        const suffix = old.slice(m.from.length)
-        if (old === m.from) await openNote(mapped)
-        else await openNote(mapped + suffix)
-      }
+      await moveEntry(m.from, joinPath(m.parent, raw), !!m.dir)
     }
     closeModal()
   } catch (e) {
@@ -431,16 +531,16 @@ onBeforeUnmount(() => {
       </div>
 
       <div class="topbar-actions">
-        <button class="nav-btn desktop-only" @click="goStats">效率统计</button>
+        <span class="desktop-only"><button class="nav-btn" @click="goStats">效率统计</button></span>
         <button class="nav-btn" @click="goChat">返回聊天</button>
-        <button class="icon-btn desktop-only" title="切换主题" @click="toggleTheme">
+        <span class="desktop-only"><button class="icon-btn" title="切换主题" @click="toggleTheme">
           <svg v-if="theme === 'dark'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
             <circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41" />
           </svg>
           <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
           </svg>
-        </button>
+        </button></span>
         <button class="icon-btn" title="退出登录" @click="logout">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
@@ -457,7 +557,7 @@ onBeforeUnmount(() => {
         <div class="side-head">
           <div>
             <h2>笔记</h2>
-            <p class="side-sub">.md · 自动保存</p>
+            <p class="side-sub">.md · 拖到文件夹即移动</p>
           </div>
           <div class="side-actions">
             <button class="icon-btn small" title="新建笔记" @click="openNewNote">
@@ -477,17 +577,34 @@ onBeforeUnmount(() => {
         <div v-if="loadingTree" class="side-hint">载入目录…</div>
         <div v-else-if="treeError" class="side-hint error">{{ treeError }}</div>
 
-        <nav v-else class="tree" aria-label="笔记列表">
+        <nav
+          v-else
+          class="tree"
+          :class="{ 'root-target': treeRootActive }"
+          aria-label="笔记列表"
+          @dragover="onTreeDragOver"
+          @dragleave="onTreeDragLeave"
+          @drop="onTreeDrop"
+        >
           <button
             v-for="row in rows"
             :key="row.path"
             class="tree-row"
             :class="{
               active: row.path === currentPath,
-              folder: row.dir
+              folder: row.dir,
+              'drag-source': dragSource?.path === row.path,
+              'drop-target': dragOverPath === row.path,
+              droppable: !!dragSource && row.dir && canDropOn(row)
             }"
             :style="{ paddingLeft: 10 + row.depth * 16 + 'px' }"
+            draggable="true"
             @click="row.dir ? toggleOpen(row.path) : openNote(row.path)"
+            @dragstart="onRowDragStart(row, $event)"
+            @dragend="endDrag"
+            @dragover="onRowDragOver(row, $event)"
+            @dragleave="onRowDragLeave(row)"
+            @drop="onRowDrop(row, $event)"
           >
             <span v-if="row.dir" class="tree-caret">
               <svg :class="{ rotated: row.open }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m9 18 6-6-6-6" /></svg>
@@ -630,12 +747,32 @@ onBeforeUnmount(() => {
   height: 100%;
 }
 
+/* 顶栏右侧操作区：统一垂直居中，文字/图标按按钮盒心对齐，防任何 display 覆写导致偏移 */
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
+}
+.topbar-actions .nav-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  flex: none;
+}
+.topbar-actions .icon-btn {
+  display: grid;
+  place-items: center;
+  flex: none;
+}
+
 .desktop-only {
   display: none;
 }
 @media (min-width: 1081px) {
   .desktop-only {
     display: inline-flex;
+    align-items: center;
   }
 }
 .mobile-only {
@@ -778,6 +915,38 @@ onBeforeUnmount(() => {
 }
 .tree-row.active .tree-name {
   color: var(--accent);
+}
+
+/* 拖拽移动 */
+.tree-row.drag-source {
+  opacity: 0.45;
+}
+.tree-row.droppable {
+  cursor: copy;
+}
+.tree-row.droppable .tree-name {
+  color: var(--accent-2);
+}
+.tree-row.drop-target {
+  background: var(--accent-soft);
+  outline: 2px dashed var(--accent);
+  outline-offset: -2px;
+}
+.tree-row.drop-target .tree-name {
+  color: var(--accent);
+}
+.tree.root-target {
+  outline: 2px dashed var(--accent-2);
+  outline-offset: -4px;
+  border-radius: 10px;
+}
+.tree.root-target::after {
+  content: '松开以移动到根目录';
+  display: block;
+  text-align: center;
+  color: var(--accent);
+  font-size: 12px;
+  padding: 6px 0 2px;
 }
 
 .tree-caret {

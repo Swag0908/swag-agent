@@ -46,3 +46,10 @@ dist/
 
 ### 发布脚本（含服务器 IP/账号，勿提交 GitHub）###
 /deploy/
+
+### Markdown 笔记本地数据（默认落在后端工作目录 ./notes-data）###
+notes-data/
+**/notes-data/
+
+### 本地文档与生成产物（架构图/视觉检查图等，仅本地留存）###
+/docs/

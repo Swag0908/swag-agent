@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   getBookmarks,
@@ -10,7 +10,7 @@ import {
   updateBookmark,
   deleteBookmark
 } from '../api/bookmarks'
-import { getUser, clearAuth } from '../auth'
+import { getUser, clearAuth, authHeaders } from '../auth'
 import { currentTheme, applyTheme } from '../theme'
 import { logout as logoutApi } from '../api/auth'
 
@@ -29,6 +29,9 @@ const query = ref('')
 const theme = ref(currentTheme())
 const faviconFailed = ref({})
 const faviconIdx = ref({})
+const cachedFaviconUrls = ref({})
+const cachedObjectUrls = new Set()
+let iconLoadSequence = 0
 
 const folderModal = ref(false)
 const folderSaving = ref(false)
@@ -120,11 +123,17 @@ async function load() {
   loading.value = true
   error.value = ''
   try {
-    library.value = await getBookmarks({
+    const nextLibrary = await getBookmarks({
       folderId: selectedFolderId.value,
       q: query.value,
       unclassified: unclassifiedOnly.value
     })
+    const loadSequence = ++iconLoadSequence
+    releaseCachedIcons()
+    faviconFailed.value = {}
+    faviconIdx.value = {}
+    library.value = nextLibrary
+    void loadCachedIcons(nextLibrary.bookmarks || [], loadSequence)
   } catch (e) {
     error.value = e?.message || '加载失败'
   } finally {
@@ -305,6 +314,9 @@ function domain(url) {
 }
 
 function faviconUrl(bookmark) {
+  const cached = cachedFaviconUrls.value[bookmark.id]
+  if (cached) return cached
+  if (faviconFailed.value[bookmark.id]) return null
   const candidates = faviconCandidates(bookmark)
   const idx = faviconIdx.value[bookmark.id] ?? 0
   return candidates[idx] || null
@@ -360,12 +372,49 @@ function onFaviconError(bookmark) {
   }
 }
 
+async function loadCachedIcons(bookmarks, loadSequence) {
+  const icons = await Promise.all(bookmarks.map(async (bookmark) => {
+    try {
+      const res = await fetch(`/api/bookmarks/${bookmark.id}/icon`, {
+        headers: authHeaders()
+      })
+      if (!res.ok) return null
+      const blob = await res.blob()
+      if (!blob.size) return null
+      const url = URL.createObjectURL(blob)
+      if (loadSequence !== iconLoadSequence) {
+        URL.revokeObjectURL(url)
+        return null
+      }
+      cachedObjectUrls.add(url)
+      return [bookmark.id, url]
+    } catch {
+      return null
+    }
+  }))
+  const next = {}
+  for (const item of icons) {
+    if (item) next[item[0]] = item[1]
+  }
+  if (loadSequence === iconLoadSequence) cachedFaviconUrls.value = next
+}
+
+function releaseCachedIcons() {
+  for (const url of cachedObjectUrls) URL.revokeObjectURL(url)
+  cachedObjectUrls.clear()
+  cachedFaviconUrls.value = {}
+}
+
 function collectNode(node, map) {
   map.set(node.id, node)
   for (const child of node.children || []) collectNode(child, map)
 }
 
 onMounted(load)
+onUnmounted(() => {
+  iconLoadSequence++
+  releaseCachedIcons()
+})
 </script>
 
 <template>
@@ -546,7 +595,7 @@ onMounted(load)
             <div class="site-card-head">
               <a class="site-favicon" :href="bookmark.url" target="_blank" rel="noopener">
                 <img
-                  v-if="!faviconFailed[bookmark.id] && faviconUrl(bookmark)"
+                  v-if="faviconUrl(bookmark)"
                   :src="faviconUrl(bookmark)"
                   :alt="bookmark.name"
                   loading="lazy"

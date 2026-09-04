@@ -90,6 +90,11 @@ function goSites() {
   router.push({ name: 'sites' })
 }
 
+function goNotes() {
+  moreOpen.value = false
+  router.push({ name: 'notes' })
+}
+
 async function startNewChat() {
   moreOpen.value = false
   histOpen.value = false
@@ -218,6 +223,13 @@ async function handleSend(text) {
             </svg>
             <span>常用网站</span>
           </button>
+          <button class="sidebar-link" type="button" @click="goNotes">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <path d="M6 3h9l4 4v14H6V3Z" />
+              <path d="M15 3v4h4M9 11h7M9 15h7" />
+            </svg>
+            <span>Markdown 笔记</span>
+          </button>
           <button class="sidebar-link" type="button" @click="goStats">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
               <path d="M4 19V9M10 19V5M16 19v-7M22 19H2" />
@@ -303,6 +315,7 @@ async function handleSend(text) {
               <button type="button" class="more-action" @click="memoryOpen = true; moreOpen = false">我的记忆</button>
               <button type="button" class="more-action" @click="panelOpen = true; moreOpen = false">今日待办</button>
               <button type="button" class="more-action" @click="goSites">常用网站</button>
+              <button type="button" class="more-action" @click="goNotes">Markdown 笔记</button>
               <button type="button" class="more-action" @click="goStats">效率统计</button>
               <button type="button" class="more-action danger" @click="logout">退出登录</button>
             </div>

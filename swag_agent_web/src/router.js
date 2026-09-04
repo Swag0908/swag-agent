@@ -24,6 +24,12 @@ const routes = [
     name: 'sites',
     component: () => import('./views/SitesView.vue'),
     meta: { requiresAuth: true }
+  },
+  {
+    path: '/notes',
+    name: 'notes',
+    component: () => import('./views/NotesView.vue'),
+    meta: { requiresAuth: true }
   }
 ]
 

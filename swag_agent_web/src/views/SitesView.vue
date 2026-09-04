@@ -386,6 +386,7 @@ onMounted(load)
       </div>
 
       <div class="topbar-actions">
+        <button class="nav-btn" @click="router.push({ name: 'notes' })">Markdown 笔记</button>
         <button class="nav-btn" @click="router.push({ name: 'chat' })">返回聊天</button>
 
         <button class="icon-btn" title="切换主题" @click="toggleTheme">

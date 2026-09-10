@@ -5,6 +5,9 @@ import com.swag.auth.UserContextHolder;
 import com.swag.chat.ChatConversationDO;
 import com.swag.chat.ChatHistoryRepository;
 import com.swag.memory.UserMemoryService;
+import com.swag.skill.SkillAssembler;
+import io.micrometer.tracing.Span;
+import io.micrometer.tracing.Tracer;
 import com.swag.tool.SelectModelTool;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.memory.ChatMemory;
@@ -33,6 +36,13 @@ public class TestController {
 
     @Autowired
     private UserMemoryService userMemoryService;
+
+    /** 技能包注入（网上下载的 SKILL.md 即插即用，无需为每个技能写 Java）。 */
+    @Autowired
+    private SkillAssembler skillAssembler;
+
+    @Autowired
+    private Tracer tracer;
 
     private static final String SYSTEM_PROMPT = """
             你是 swag_agent 助手。可用工具：getCurrentTime（查时间）、todo 系列（管理待办）、webSearch（联网搜索）、
@@ -118,21 +128,35 @@ public class TestController {
     }
 
     /**
-     * 系统提示 = 固定工具说明 + 每轮按当前提问语义召回的「用户长期记忆档案」。
+     * 系统提示 = 固定工具说明 + 启用中的「技能包指南」 + 每轮按当前提问语义召回的「用户长期记忆档案」。
      * 记忆按 userId 跨会话召回（ChatGPT Memory 式），不包含会话内的短期上下文。
      */
     private String buildSystemPrompt(Long userId, String userInput) {
+        StringBuilder sb = new StringBuilder(SYSTEM_PROMPT);
+        // 技能包（src/main/resources/skills 内置 + 外部 skills-data 目录）注入；
+        // 未启用任何技能或关闭 app.skills.auto-inject 时为空串，不影响原有行为。
+        SkillAssembler.ActiveSkillGuide skillGuide = skillAssembler.assembleActiveGuide();
+        tagActiveSkills(skillGuide);
+        sb.append(skillGuide.prompt());
+        // 获取用户的用户记忆
         List<String> memories = userMemoryService.recall(userId, userInput);
         if (memories.isEmpty()) {
-            return SYSTEM_PROMPT;
+            return sb.toString();
         }
-        StringBuilder sb = new StringBuilder(SYSTEM_PROMPT);
         sb.append("\n\n【该用户的长期记忆档案（用户此前主动要求记住的偏好/事实；")
            .append("若与当前问题相关请据此作答，不相关可忽略；不要把这些当作对话历史）】\n");
         for (int i = 0; i < memories.size(); i++) {
             sb.append(i + 1).append(". ").append(memories.get(i)).append('\n');
         }
         return sb.toString();
+    }
+
+    /** 仅把 Skill 名称写入当前 Zipkin span，便于验证运行时注入且不泄露 Skill 正文。 */
+    private void tagActiveSkills(SkillAssembler.ActiveSkillGuide skillGuide) {
+        Span span = tracer.currentSpan();
+        if (span != null) {
+            span.tag("active_skills", skillGuide.traceTagValue());
+        }
     }
 
     /**

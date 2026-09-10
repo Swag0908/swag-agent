@@ -51,5 +51,9 @@ dist/
 notes-data/
 **/notes-data/
 
+### 技能运行时安装目录（app.skills.external-root 默认 ./skills-data，不入库）###
+skills-data/
+**/skills-data/
+
 ### 本地文档与生成产物（架构图/视觉检查图等，仅本地留存）###
 /docs/

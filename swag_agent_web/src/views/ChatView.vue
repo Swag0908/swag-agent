@@ -117,6 +117,11 @@ function goNotes() {
   router.push({ name: 'notes' })
 }
 
+function goSkills() {
+  moreOpen.value = false
+  router.push({ name: 'skills' })
+}
+
 async function startNewChat() {
   moreOpen.value = false
   histOpen.value = false
@@ -269,6 +274,13 @@ async function handleSend(text) {
             </svg>
             <span>效率统计</span>
           </button>
+          <button v-if="isAdmin" class="sidebar-link" type="button" @click="goSkills">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <path d="M4 5.5A1.5 1.5 0 0 1 5.5 4H9l1.5 2h8A1.5 1.5 0 0 1 20 7.5V18a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 18V5.5Z" />
+              <path d="M8 12h8M8 15.5h5" />
+            </svg>
+            <span>技能管理</span>
+          </button>
           <button v-if="isAdmin" class="sidebar-link" type="button" @click="adminOpen = true">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
               <path d="M12 3l7 3v5c0 4.4-2.9 7.9-7 9-4.1-1.1-7-4.6-7-9V6l7-3Z" />
@@ -357,6 +369,7 @@ async function handleSend(text) {
               <button type="button" class="more-action" @click="goSites">常用网站</button>
               <button type="button" class="more-action" @click="goNotes">Markdown 笔记</button>
               <button type="button" class="more-action" @click="goStats">效率统计</button>
+              <button v-if="isAdmin" type="button" class="more-action" @click="goSkills">技能管理</button>
               <button v-if="isAdmin" type="button" class="more-action" @click="adminOpen = true; moreOpen = false">注册管理</button>
               <button type="button" class="more-action danger" @click="logout">退出登录</button>
             </div>

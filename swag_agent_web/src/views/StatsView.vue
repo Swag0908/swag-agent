@@ -6,6 +6,7 @@ import { getUser } from '../auth'
 
 const router = useRouter()
 const user = getUser()
+const isAdmin = computed(() => user?.role === 'ADMIN')
 
 const stats = ref([])
 const loading = ref(false)
@@ -75,6 +76,7 @@ onMounted(load)
       <div class="topbar-actions">
         <button class="nav-btn" @click="router.push({ name: 'notes' })">Markdown 笔记</button>
         <button class="nav-btn" @click="router.push({ name: 'sites' })">常用网站</button>
+        <button v-if="isAdmin" class="nav-btn" @click="router.push({ name: 'skills' })">技能管理</button>
         <button class="nav-btn" @click="router.push({ name: 'chat' })">返回聊天</button>
       </div>
     </header>

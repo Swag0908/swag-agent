@@ -71,6 +71,8 @@ public class AuthFilter extends OncePerRequestFilter {
     private boolean isPublicPath(String path) {
         return path.startsWith("/auth/register")
                 || path.startsWith("/auth/login")
+                // nginx auth_request 子请求入口：自己校验 Cookie 里的管理员票据
+                || path.startsWith("/auth/zipkin-access")
                 || path.startsWith("/actuator/")
                 || path.equals("/error");
     }

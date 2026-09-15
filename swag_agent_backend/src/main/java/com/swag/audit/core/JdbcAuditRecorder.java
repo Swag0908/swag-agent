@@ -24,7 +24,7 @@ public class JdbcAuditRecorder implements AuditRecorder {
             INSERT INTO audit_event (
                 event_id, audit_id, request_id, source_event_id,
                 trace_id, span_id, parent_span_id, parent_event_id,
-                tenant_id, session_id,
+                tenant_id, session_id, conversation_id,
                 actor_type, actor_id, actor_display_name,
                 event_type, execution_status,
                 agent_name, agent_version, model_name,
@@ -37,7 +37,7 @@ public class JdbcAuditRecorder implements AuditRecorder {
             ) VALUES (
                 :eventId, :auditId, :requestId, NULL,
                 :traceId, :spanId, :parentSpanId, :parentEventId,
-                :tenantId, :sessionId,
+                :tenantId, :sessionId, :conversationId,
                 :actorType, :actorId, NULL,
                 :eventType, :executionStatus,
                 :agentName, :agentVersion, :modelName,
@@ -88,6 +88,7 @@ public class JdbcAuditRecorder implements AuditRecorder {
                 .addValue("parentEventId", uuid(command.parentEventId()))
                 .addValue("tenantId", requestContext == null ? null : requestContext.tenantId())
                 .addValue("sessionId", requestContext == null ? null : requestContext.sessionId())
+                .addValue("conversationId", requestContext == null ? null : requestContext.conversationId())
                 .addValue("actorType", defaultString(command.actorType(), "SYSTEM"))
                 .addValue("actorId", command.actorIdOverride() != null
                         ? command.actorIdOverride()

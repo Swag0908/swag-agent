@@ -37,6 +37,18 @@ public class AuditContextFilter extends OncePerRequestFilter {
     public static final String REQUEST_ID_HEADER = "X-Request-Id";
     public static final String USER_ID_HEADER = "X-User-Id";
     public static final String TENANT_ID_HEADER = "X-Tenant-Id";
+    /** 聊天请求携带的会话 id；前端同时放在查询串里，这里也接受显式请求头。 */
+    public static final String CONVERSATION_ID_HEADER = "X-Conversation-Id";
+    private static final String CONVERSATION_ID_PARAM = "conversationId";
+
+    /**
+     * nginx auth_request 的内部鉴权探针，与 {@code AuthFilter} 里的公开路径对应。
+     * <p>
+     * 它不是用户操作：打开一次 Zipkin 页面会触发若干次（页面 + /zipkin/api/v2 + config.json），
+     * 而且此时还没有 {@code X-User-Id}（actor 只能是 anonymous）。记进审计只会让
+     * 「调用链」列表被一堆同名匿名链刷屏，因此整条请求都不审计。
+     */
+    private static final String ZIPKIN_GATE_PROBE_PATH = "/auth/zipkin-access";
 
     private final Tracer tracer;
     private final AuditRecorder auditRecorder;
@@ -49,6 +61,11 @@ public class AuditContextFilter extends OncePerRequestFilter {
         this.tracer = tracer;
         this.auditRecorder = auditRecorder;
         this.confirmationService = confirmationService;
+    }
+
+    @Override
+    protected boolean shouldNotFilter(HttpServletRequest request) {
+        return ZIPKIN_GATE_PROBE_PATH.equals(request.getRequestURI());
     }
 
     @Override
@@ -74,7 +91,8 @@ public class AuditContextFilter extends OncePerRequestFilter {
                 tenantId,
                 actorId,
                 sessionId,
-                confirmationId);
+                confirmationId,
+                resolveConversationId(request));
 
         response.setHeader(AUDIT_ID_HEADER, auditId.toString());
 
@@ -110,6 +128,24 @@ public class AuditContextFilter extends OncePerRequestFilter {
                         tenantId,
                         actorId)
                 .orElseGet(UUID::randomUUID);
+    }
+
+    /**
+     * 解析本次请求所属的聊天会话 id。
+     *
+     * <p>只在 GET 上读查询串参数：{@code getParameter} 会触发 form body 解析，
+     * 对 POST 表单请求提前消费请求体，所以非 GET 一律只认请求头。
+     */
+    private String resolveConversationId(HttpServletRequest request) {
+        String header = request.getHeader(CONVERSATION_ID_HEADER);
+        if (header != null && !header.isBlank()) {
+            return header;
+        }
+        if (!"GET".equalsIgnoreCase(request.getMethod())) {
+            return null;
+        }
+        String param = request.getParameter(CONVERSATION_ID_PARAM);
+        return param == null || param.isBlank() ? null : param;
     }
 
     private void recordRequestReceived(HttpServletRequest request) {

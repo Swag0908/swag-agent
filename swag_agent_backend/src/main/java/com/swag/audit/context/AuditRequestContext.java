@@ -11,6 +11,8 @@ import java.util.UUID;
  * @param actorId 当前用户标识
  * @param sessionId 当前会话标识
  * @param confirmationId 本次重试携带的确认标识
+ * @param conversationId 本次请求所属的聊天会话 id（非聊天请求为 null）；
+ *                       删除会话时按它回收该会话的审计记录
  */
 public record AuditRequestContext(
         UUID auditId,
@@ -18,5 +20,6 @@ public record AuditRequestContext(
         String tenantId,
         String actorId,
         String sessionId,
-        UUID confirmationId) {
+        UUID confirmationId,
+        String conversationId) {
 }

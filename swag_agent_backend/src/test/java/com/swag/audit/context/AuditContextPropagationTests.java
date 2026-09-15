@@ -55,7 +55,8 @@ class AuditContextPropagationTests {
                 "tenant-1",
                 "actor-1",
                 "session-1",
-                null);
+                null,
+                "42");
         AtomicReference<String> executionThread = new AtomicReference<>();
 
         AuditRequestContext actual;

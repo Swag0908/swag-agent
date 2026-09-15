@@ -16,6 +16,7 @@ import { logout as logoutApi } from '../api/auth'
 
 const router = useRouter()
 const user = getUser()
+const isAdmin = computed(() => user?.role === 'ADMIN')
 
 const library = ref({ folders: [], bookmarks: [], total: 0 })
 const loading = ref(false)
@@ -436,6 +437,7 @@ onUnmounted(() => {
 
       <div class="topbar-actions">
         <button class="nav-btn" @click="router.push({ name: 'notes' })">Markdown 笔记</button>
+        <button v-if="isAdmin" class="nav-btn" @click="router.push({ name: 'traces' })">调用链</button>
         <button class="nav-btn" @click="router.push({ name: 'chat' })">返回聊天</button>
 
         <button class="icon-btn" title="切换主题" @click="toggleTheme">
@@ -498,25 +500,6 @@ onUnmounted(() => {
             <span class="folder-row-count">{{ library.total }}</span>
           </button>
 
-          <div class="folder-tree-sep"></div>
-
-          <button
-            class="folder-row"
-            :class="{ active: unclassifiedOnly }"
-            :style="{ paddingLeft: 12 + 'px' }"
-            @click="selectUnclassified"
-          >
-            <span class="folder-chevron"></span>
-            <span class="folder-row-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                   stroke-linecap="round" stroke-linejoin="round">
-                <path d="M4 4h7l2 2h7v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4z" />
-              </svg>
-            </span>
-            <span class="folder-row-name">未分类</span>
-            <span class="folder-row-count">{{ library.bookmarks.filter((b) => b.folderId == null).length }}</span>
-          </button>
-
           <div v-if="!folderRows.length" class="folder-tree-empty">还没有文件夹</div>
           <button
             v-for="folder in folderRows"
@@ -557,6 +540,25 @@ onUnmounted(() => {
                 </svg>
               </button>
             </span>
+          </button>
+
+          <div class="folder-tree-sep"></div>
+
+          <button
+            class="folder-row"
+            :class="{ active: unclassifiedOnly }"
+            :style="{ paddingLeft: 12 + 'px' }"
+            @click="selectUnclassified"
+          >
+            <span class="folder-chevron"></span>
+            <span class="folder-row-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                   stroke-linecap="round" stroke-linejoin="round">
+                <path d="M4 4h7l2 2h7v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4z" />
+              </svg>
+            </span>
+            <span class="folder-row-name">未分类</span>
+            <span class="folder-row-count">{{ library.bookmarks.filter((b) => b.folderId == null).length }}</span>
           </button>
         </nav>
       </aside>

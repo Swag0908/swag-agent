@@ -9,9 +9,15 @@ export async function streamChat({ model, message, conversationId, signal, onDel
   if (conversationId) params.set('conversationId', String(conversationId))
   const url = '/api/test/chat/stream?' + params.toString()
 
+  // 显式带上会话 id：审计上下文按它把本次请求的事件挂到聊天会话上，
+  // 删除会话时才能连审计记录一起回收（查询串里也有一份，防止代理改写请求头）。
+  const conversationHeaders = conversationId
+    ? { 'X-Conversation-Id': String(conversationId) }
+    : {}
+
   const res = await fetch(url, {
     signal,
-    headers: { Accept: 'text/plain', ...authHeaders() }
+    headers: { Accept: 'text/plain', ...conversationHeaders, ...authHeaders() }
   })
 
   if (res.status === 401) {

@@ -13,6 +13,11 @@ export default defineConfig({
         target: 'http://localhost:8080',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, '')
+      },
+      // 本地直连 Zipkin；生产是 nginx 反代 + 管理员鉴权，不经过 Vite
+      '/zipkin': {
+        target: 'http://localhost:9411',
+        changeOrigin: true
       }
     }
   }

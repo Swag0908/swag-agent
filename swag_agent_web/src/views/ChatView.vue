@@ -1,7 +1,7 @@
 <script setup>
 import { ref, watch, nextTick, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
-import { useChat, ACTIVE_CONVERSATION_KEY } from '../composables/useChat'
+import { useChat, ACTIVE_CONVERSATION_KEY, conversationLabel } from '../composables/useChat'
 import ChatMessage from '../components/ChatMessage.vue'
 import ChatInput from '../components/ChatInput.vue'
 import EmptyState from '../components/EmptyState.vue'
@@ -33,6 +33,11 @@ const {
   newConversation,
   openConversation,
   deleteConversation,
+  clearConversations,
+  setFavorite,
+  renameFavorite,
+  reorderFavorites,
+  deleteMessage,
   refreshConversations
 } = useChat()
 const user = ref(getUser())
@@ -122,6 +127,11 @@ function goSkills() {
   router.push({ name: 'skills' })
 }
 
+function goTraces() {
+  moreOpen.value = false
+  router.push({ name: 'traces' })
+}
+
 async function startNewChat() {
   moreOpen.value = false
   histOpen.value = false
@@ -140,6 +150,60 @@ async function onDeleteConversation(conv) {
     await deleteConversation(conv)
   } catch (e) {
     window.alert(e?.message || '删除会话失败')
+  }
+}
+
+async function onFavorite({ conversation, favorite }) {
+  try {
+    await setFavorite(conversation, favorite)
+  } catch (e) {
+    window.alert(e?.message || (favorite ? '收藏失败' : '取消收藏失败'))
+  }
+}
+
+async function onRenameFavorite({ conversation, note }) {
+  try {
+    await renameFavorite(conversation, note)
+  } catch (e) {
+    window.alert(e?.message || '保存备注名失败')
+  }
+}
+
+async function onReorderFavorites(ids) {
+  try {
+    await reorderFavorites(ids)
+  } catch (e) {
+    window.alert(e?.message || '调整收藏顺序失败')
+    await refreshConversations()
+  }
+}
+
+async function onDeleteMessage(message) {
+  const paired = message.role === 'user' ? '这条提问和紧随的回答' : '这条回答和它对应的提问'
+  if (!window.confirm(`删除${paired}吗？\n\n模型也会忘掉它们，删除后无法恢复。`)) return
+  try {
+    await deleteMessage(message)
+  } catch (e) {
+    window.alert(e?.message || '删除这条对话失败')
+  }
+}
+
+async function onClearConversations() {
+  const count = conversations.value.length
+  if (!count) return
+  if (
+    !window.confirm(
+      `确定清空全部 ${count} 个历史会话吗？\n\n` +
+        '聊天记录、模型记忆和审计记录都会被永久删除，无法恢复。'
+    )
+  ) {
+    return
+  }
+  try {
+    const deleted = await clearConversations()
+    window.alert(`已清空 ${deleted} 个历史会话`)
+  } catch (e) {
+    window.alert(e?.message || '清空历史会话失败')
   }
 }
 
@@ -186,6 +250,9 @@ watch(lastContent, () => {
 
 const currentTitle = computed(() => {
   if (conversationId.value != null) {
+    // 收藏备注名优先，用户在列表里认的就是这个名字
+    const cur = conversations.value.find((c) => String(c.id) === String(conversationId.value))
+    if (cur) return conversationLabel(cur)
     return conversationTitle.value || (messages.length ? '当前会话' : '新对话')
   }
   return messages.length ? '当前会话' : '新任务'
@@ -220,7 +287,18 @@ async function handleSend(text) {
       </button>
 
       <div class="sidebar-history">
-        <div class="sidebar-label">历史会话</div>
+        <div class="history-head">
+          <div class="sidebar-label">历史会话</div>
+          <button
+            v-if="conversations.length"
+            class="history-clear"
+            type="button"
+            title="清空全部历史会话（连同记忆与审计记录）"
+            @click="onClearConversations"
+          >
+            清空全部
+          </button>
+        </div>
         <div class="history-scroll">
           <ConversationList
             :conversations="conversations"
@@ -228,6 +306,9 @@ async function handleSend(text) {
             empty-text="暂无历史会话"
             @select="onSelectConversation"
             @delete="onDeleteConversation"
+            @favorite="onFavorite"
+            @rename="onRenameFavorite"
+            @reorder="onReorderFavorites"
           />
         </div>
       </div>
@@ -280,6 +361,12 @@ async function handleSend(text) {
               <path d="M8 12h8M8 15.5h5" />
             </svg>
             <span>技能管理</span>
+          </button>
+          <button v-if="isAdmin" class="sidebar-link" type="button" @click="goTraces">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <path d="M3 12h4l2.5-6 3 12 2.5-6h6" />
+            </svg>
+            <span>调用链</span>
           </button>
           <button v-if="isAdmin" class="sidebar-link" type="button" @click="adminOpen = true">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
@@ -370,6 +457,7 @@ async function handleSend(text) {
               <button type="button" class="more-action" @click="goNotes">Markdown 笔记</button>
               <button type="button" class="more-action" @click="goStats">效率统计</button>
               <button v-if="isAdmin" type="button" class="more-action" @click="goSkills">技能管理</button>
+              <button v-if="isAdmin" type="button" class="more-action" @click="goTraces">调用链</button>
               <button v-if="isAdmin" type="button" class="more-action" @click="adminOpen = true; moreOpen = false">注册管理</button>
               <button type="button" class="more-action danger" @click="logout">退出登录</button>
             </div>
@@ -381,7 +469,13 @@ async function handleSend(text) {
         <div v-if="loadingHistory" class="history-loading">正在载入历史对话…</div>
         <EmptyState v-else-if="!messages.length" @select="handleSend" />
         <div v-else class="messages">
-          <ChatMessage v-for="message in messages" :key="message.id" :message="message" />
+          <ChatMessage
+            v-for="message in messages"
+            :key="message.id"
+            :message="message"
+            :deletable="!sending"
+            @delete="onDeleteMessage"
+          />
         </div>
       </main>
 
@@ -425,10 +519,21 @@ async function handleSend(text) {
           empty-text="还没有历史会话"
           @select="onSelectConversation"
           @delete="onDeleteConversation"
+          @favorite="onFavorite"
+          @rename="onRenameFavorite"
+          @reorder="onReorderFavorites"
         />
       </div>
       <footer class="hist-foot">
         <button class="hist-new" type="button" @click="startNewChat">＋ 新建会话</button>
+        <button
+          v-if="conversations.length"
+          class="hist-clear"
+          type="button"
+          @click="onClearConversations"
+        >
+          清空全部
+        </button>
       </footer>
     </aside>
 

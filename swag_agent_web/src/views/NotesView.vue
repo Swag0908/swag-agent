@@ -22,6 +22,7 @@ import { logout as logoutApi } from '../api/auth'
 
 const router = useRouter()
 const user = getUser()
+const isAdmin = computed(() => user?.role === 'ADMIN')
 
 // 默认「未分类」文件夹（根目录散笔记 / 恢复兜底 / 删文件夹平铺都会用到它）
 const UNCLASSIFIED = '未分类'
@@ -763,6 +764,9 @@ onBeforeUnmount(() => {
 
       <div class="topbar-actions">
         <span class="desktop-only"><button class="nav-btn" @click="goStats">效率统计</button></span>
+        <span v-if="isAdmin" class="desktop-only">
+          <button class="nav-btn" @click="router.push({ name: 'traces' })">调用链</button>
+        </span>
         <button class="nav-btn" @click="goChat">返回聊天</button>
         <span class="desktop-only"><button class="icon-btn" title="切换主题" @click="toggleTheme">
           <svg v-if="theme === 'dark'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">

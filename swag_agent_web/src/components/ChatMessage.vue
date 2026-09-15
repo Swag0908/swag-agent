@@ -4,8 +4,15 @@ import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 
 const props = defineProps({
-  message: { type: Object, required: true }
+  message: { type: Object, required: true },
+  // 只有已经落库的消息才能删（本地占位消息还没有服务端 id）
+  deletable: { type: Boolean, default: false }
 })
+defineEmits(['delete'])
+
+const canDelete = computed(
+  () => props.deletable && !props.message.streaming && props.message.serverId != null
+)
 
 // 助手回复按 Markdown 渲染（经 DOMPurify 消毒，防 XSS）
 const rendered = computed(() => {
@@ -43,5 +50,18 @@ const rendered = computed(() => {
       </template>
       <div v-else class="text">{{ message.content }}</div>
     </div>
+
+    <button
+      v-if="canDelete"
+      type="button"
+      class="msg-delete"
+      title="删除这条对话（提问与配对的回答会一起删除，模型也会忘掉）"
+      aria-label="删除这条对话"
+      @click="$emit('delete', message)"
+    >
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+        <path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 11v5M14 11v5" />
+      </svg>
+    </button>
   </div>
 </template>

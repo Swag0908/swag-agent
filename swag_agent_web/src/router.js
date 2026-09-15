@@ -36,6 +36,13 @@ const routes = [
     name: 'skills',
     component: () => import('./views/SkillsView.vue'),
     meta: { requiresAuth: true }
+  },
+  {
+    // 调用链：仅 ADMIN 可见/可用（后端 /audit/chains 同样只放行 ADMIN）
+    path: '/traces',
+    name: 'traces',
+    component: () => import('./views/TracesView.vue'),
+    meta: { requiresAuth: true }
   }
 ]
 

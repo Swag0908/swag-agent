@@ -75,6 +75,9 @@ export function useChat() {
    * 表现就是每轮回复结束后整屏消息重放一次入场动画。
    * - 先按 serverId 匹配（重新打开会话、删除消息后的对齐）
    * - preserveLocalIds 时再按位置兜底匹配（刚发完一轮，本地那两条还没有 serverId）
+   *
+   * <p>刚跑完一轮时（preserveLocalIds），本地还留着「思考过程」和工具调用记录，
+   * 这些后端不落库，所以这里原样保留，避免刚落库就把过程记录抹掉。
    */
   function applyServerMessages(list, { preserveLocalIds = false } = {}) {
     const incoming = Array.isArray(list) ? list : []
@@ -93,13 +96,20 @@ export function useChat() {
         }
       }
       if (local) reused.add(local.id)
+      const keepEphemeral = local && local.keepEphemeral
       return {
         id: local ? local.id : nextId(),
         serverId: m.id ?? null,
         role,
         content: m.content || '',
         streaming: false,
-        error: local ? local.error : false
+        error: local ? local.error : false,
+        // 过程信息（后端不落库，刷新后为空）
+        reasoning: keepEphemeral ? local.reasoning : '',
+        tools: keepEphemeral ? local.tools || [] : [],
+        activeTool: null,
+        thinking: false,
+        keepEphemeral: false
       }
     })
 
@@ -267,15 +277,52 @@ export function useChat() {
 
     messages.push({ id: nextId(), serverId: null, role: 'user', content: text })
 
+    // 助手这条消息除了正文，还挂着一轮的「干活过程」：
+    // reasoning 是工具调用前后的铺垫文字，tools 是工具调用记录，activeTool 指向正在跑的那个。
     const assistant = reactive({
       id: nextId(),
       serverId: null,
       role: 'assistant',
       content: '',
+      reasoning: '',
+      tools: [],
+      activeTool: null,
+      thinking: true,
       streaming: true,
-      error: false
+      error: false,
+      keepEphemeral: false
     })
     messages.push(assistant)
+
+    // 后端用 call_id 把「开始执行」和「执行完成」两条事件配对，这里同一规则
+    const toolKey = (data) => String(data?.call_id || data?.name || 'tool')
+    const toolStatus = (status) => (status === 'SUCCEEDED' ? 'done' : status === 'FAILED' ? 'failed' : 'running')
+
+    function upsertTool(data) {
+      const key = toolKey(data)
+      let entry = assistant.tools.find((t) => t.key === key)
+      if (!entry) {
+        entry = { key, name: data.name }
+        assistant.tools.push(entry)
+      }
+      entry.name = data.name || entry.name
+      entry.display = data.display || entry.display
+      entry.detail = data.detail || entry.detail
+      entry.status = toolStatus(data.status)
+      // 只有「正在执行」才高亮；完成/失败后收起提示，正文可以继续输出
+      assistant.activeTool = entry.status === 'running' ? entry : null
+    }
+
+    // 把当前正文搬进「思考过程」。两种情况会用：
+    //  ① 后端发来 segment_boundary（工具开始前 / 给出最终回答前，正文里的其实都是铺垫）；
+    //  ② 第一次收到工具事件时（兜底，保证实时观感也正确）。
+    function demoteContentToReasoning() {
+      if (!assistant.content) return
+      assistant.reasoning += assistant.content
+      assistant.content = ''
+    }
+
+    let sawToolCall = false
 
     sending.value = true
     controller = new AbortController()
@@ -288,12 +335,44 @@ export function useChat() {
         signal: controller.signal,
         onDelta: (chunk) => {
           assistant.content += chunk
+          assistant.thinking = false
+          assistant.activeTool = null
+        },
+        onEvent: (eventName, data) => {
+          if (eventName === 'tool_call') {
+            if (!sawToolCall) {
+              // 模型开始用工具了：刚才流出来的正文其实是铺垫，搬进思考过程
+              sawToolCall = true
+              demoteContentToReasoning()
+            }
+            upsertTool(data)
+          } else if (eventName === 'reasoning') {
+            if (typeof data.text === 'string') assistant.reasoning += data.text
+          } else if (eventName === 'segment_boundary') {
+            // 后端明确要求切换：把已显示的正文降级为思考过程，正文区让给最终回答
+            demoteContentToReasoning()
+            assistant.activeTool = null
+            assistant.thinking = true
+          } else if (eventName === 'error') {
+            assistant.error = true
+            assistant.content +=
+              (assistant.content ? '\n\n' : '') + '> ⚠️ ' + (data.message || '服务异常')
+          }
         }
       })
       assistant.streaming = false
+      assistant.thinking = false
+      assistant.activeTool = null
+      assistant.keepEphemeral = true
     } catch (err) {
       assistant.streaming = false
+      assistant.thinking = false
+      assistant.activeTool = null
+      assistant.keepEphemeral = true
       if (err && err.name === 'AbortError') {
+        assistant.tools.forEach((t) => {
+          if (t.status === 'running') t.status = 'failed'
+        })
         if (!assistant.content.trim()) {
           assistant.content = '（已停止）'
         }
@@ -310,7 +389,8 @@ export function useChat() {
       const cur = conversations.value.find((c) => String(c.id) === String(conversationId.value))
       if (cur) conversationTitle.value = cur.title || conversationTitle.value
       // 回填服务端消息 id：本地消息本身没有 id，不取回来就没法删除单条对话。
-      // preserveLocalIds 让刚发出的这两条沿用本地 id，避免整屏重放入场动画。
+      // preserveLocalIds 让刚发出的这两条沿用本地 id，避免整屏重放入场动画；
+      // 处理过程（reasoning/tools）后端不落库，由 applyServerMessages 原样保留。
       try {
         await syncMessages(conversationId.value, { preserveLocalIds: true })
       } catch {

@@ -39,13 +39,15 @@ cd ../swag_agent_backend
 ./mvnw spring-boot:run
 ```
 
-后端默认监听 `http://localhost:8080`，新增的流式接口为：
+后端默认监听 `http://localhost:8080`，前端使用的流式接口为：
 
 ```
-GET /test/chat/stream?model=1&userInput=你好
+GET /test/chat/stream/events?model=1&userInput=你好&conversationId=1
 ```
 
-> 返回 `text/plain` 纯文本流（逐字输出）。旧的 `GET /test/chat` 仍可用（整段返回）。
+> 返回 SSE（`text/event-stream`）：除正文外还实时推送「正在思考 / 正在调用哪个工具 / 工具跑完」，
+> 前端据此显示干活进度与工具徽章。旧的 `GET /test/chat/stream`（`text/plain` 纯文本流）与
+> `GET /test/chat`（整段返回）仍可用。事件协议见 `docs/03-会话与记忆/流式工具状态.md`。
 
 ### 2. 启动前端（本目录）
 

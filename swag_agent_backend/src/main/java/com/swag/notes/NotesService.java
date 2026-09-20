@@ -6,6 +6,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
@@ -88,8 +89,54 @@ public class NotesService {
         }
     }
 
+    /**
+     * 新建一篇笔记（.md）：同名文件已存在时返回 409，<b>绝不覆盖</b>已有内容。
+     * 覆盖已有笔记请用 {@link #save}。
+     */
+    public NotesViews.SaveResult create(Long userId, String rel, String content) {
+        return write(userId, rel, content, false);
+    }
+
+    /**
+     * 在目标文件夹内以来源文件名创建笔记；同名时自动追加 {@code (n)}，绝不覆盖已有笔记。
+     * 导入模块只需表达“放进这个文件夹”，重名策略由笔记存储层统一封装。
+     */
+    public NotesViews.SaveResult createUnique(Long userId, String targetDir,
+                                              String sourceFileName, String content) {
+        String name = fileName(sourceFileName == null ? "" : sourceFileName.replace('\\', '/'));
+        if (name == null || name.isBlank() || !name.equals(sourceFileName)) {
+            throw badRequest("导入文件名非法：" + sourceFileName);
+        }
+        requireNoteExtension(name);
+
+        Path home = ensureHome(userId);
+        String parent = targetDir == null ? "" : targetDir.strip();
+        if (!parent.isEmpty()) {
+            requireDir(home, parent);
+        }
+        int dot = name.lastIndexOf('.');
+        String stem = dot > 0 ? name.substring(0, dot) : name;
+        String ext = dot > 0 ? name.substring(dot) : "";
+        for (int i = 0; ; i++) {
+            String candidateName = i == 0 ? name : stem + " (" + i + ")" + ext;
+            String rel = parent.isEmpty() ? candidateName : parent + "/" + candidateName;
+            try {
+                return create(userId, rel, content);
+            }
+            catch (ResponseStatusException e) {
+                if (e.getStatusCode().value() != HttpStatus.CONFLICT.value()) {
+                    throw e;
+                }
+            }
+        }
+    }
+
     /** 新建或整体覆盖一篇笔记（.md）。父目录必须已存在。 */
     public NotesViews.SaveResult save(Long userId, String rel, String content) {
+        return write(userId, rel, content, true);
+    }
+
+    private NotesViews.SaveResult write(Long userId, String rel, String content, boolean overwrite) {
         requireNoteExtension(rel);
         byte[] bytes = (content == null ? "" : content).getBytes(StandardCharsets.UTF_8);
         if (bytes.length > MAX_NOTE_BYTES) {
@@ -101,18 +148,32 @@ public class NotesService {
         if (Files.isDirectory(file)) {
             throw badRequest("「" + rel + "」已存在且是文件夹");
         }
+        if (!overwrite && Files.exists(file, LinkOption.NOFOLLOW_LINKS)) {
+            throw conflict("已存在同名笔记：" + rel);
+        }
         try {
             Path parent = file.getParent();
             if (!Files.isDirectory(parent)) {
                 throw new ResponseStatusException(HttpStatus.NOT_FOUND,
                         "父目录不存在：" + display(parent, home));
             }
-            Files.write(file, bytes,
-                    StandardOpenOption.CREATE,
-                    StandardOpenOption.TRUNCATE_EXISTING,
-                    StandardOpenOption.WRITE);
+            if (overwrite) {
+                Files.write(file, bytes,
+                        StandardOpenOption.CREATE,
+                        StandardOpenOption.TRUNCATE_EXISTING,
+                        StandardOpenOption.WRITE);
+            }
+            else {
+                // CREATE_NEW：创建与判重是同一个原子操作，并发下也不会覆盖已有笔记
+                Files.write(file, bytes,
+                        StandardOpenOption.CREATE_NEW,
+                        StandardOpenOption.WRITE);
+            }
             return new NotesViews.SaveResult(rel, Files.size(file),
                     Files.getLastModifiedTime(file).toMillis());
+        }
+        catch (FileAlreadyExistsException e) {
+            throw conflict("已存在同名笔记：" + rel);
         }
         catch (IOException e) {
             throw ioError("保存笔记失败：" + rel, e);
@@ -157,7 +218,7 @@ public class NotesService {
             return;
         }
         if (Files.exists(target)) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "目标位置已存在：" + to);
+            throw conflict("目标位置已存在：" + to);
         }
         try {
             Path parent = target.getParent();
@@ -686,6 +747,10 @@ public class NotesService {
 
     private ResponseStatusException forbidden(String message) {
         return new ResponseStatusException(HttpStatus.FORBIDDEN, message);
+    }
+
+    private ResponseStatusException conflict(String message) {
+        return new ResponseStatusException(HttpStatus.CONFLICT, message);
     }
 
     private ResponseStatusException notFound(String message) {

@@ -97,6 +97,31 @@ class NotesServiceTests {
         assertEquals("a", service.read(2L, "子目录/moved/a.md").content());
     }
 
+    @Test
+    void createRejectsDuplicateNameWithoutOverwriting() {
+        service.save(9L, "未分类/周报.md", "原有内容");
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class,
+                () -> service.create(9L, "未分类/周报.md", "# 新内容\n\n"));
+        assertEquals(409, ex.getStatusCode().value());
+        // 关键：已有笔记内容必须原样保留，不能被覆盖
+        assertEquals("原有内容", service.read(9L, "未分类/周报.md").content());
+
+        // 换一个名字可以正常新建；覆盖式 save 仍按原语义工作
+        service.create(9L, "未分类/周报 (1).md", "副本");
+        assertEquals("副本", service.read(9L, "未分类/周报 (1).md").content());
+        service.save(9L, "未分类/周报.md", "改写");
+        assertEquals("改写", service.read(9L, "未分类/周报.md").content());
+    }
+
+    @Test
+    void createRejectsNameOccupiedByFolder() {
+        service.createDir(9L, "未分类/同名.md"); // 文件夹恰好占用了同名 .md 路径
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class,
+                () -> service.create(9L, "未分类/同名.md", "x"));
+        assertEquals(400, ex.getStatusCode().value());
+    }
+
     // ---------- 回收站 ----------
 
     @Test

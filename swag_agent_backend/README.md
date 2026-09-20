@@ -4,16 +4,38 @@
 
 ## 运行
 
-在当前目录配置 `DEEPSEEK_API_KEY`、`MYSQL_PASSWORD` 等本地环境变量后执行：
+本项目需要 **JDK 21**（本机默认 `java` 可能是 8，启动前先确认）：
 
 ```bash
+export JAVA_HOME=$(/usr/libexec/java_home -v 21)   # macOS
 ./mvnw spring-boot:run
 ```
 
+在当前目录配置 `DEEPSEEK_API_KEY`、`MYSQL_PASSWORD` 等本地环境变量后执行。
 服务默认监听 `http://localhost:8080`。
 
 本地专用的 `src/main/resources/application-dev.properties` 已被 Git 忽略，
 请勿提交密钥或数据库密码。
+
+## 聊天接口
+
+| 接口 | 输出 | 用途 |
+| --- | --- | --- |
+| `GET /test/chat` | 整段纯文本 | 最简调试 |
+| `GET /test/chat/stream` | `text/plain` 流 | 只要逐字正文，兼容老调用方 |
+| `GET /test/chat/stream/events` | `text/event-stream`（SSE） | **前端在用**：正文之外还实时推送「思考中 / 正在调用哪个工具 / 工具跑完」 |
+
+SSE 事件类型：`ready`、`content`（正文，会落库）、`reasoning`（过程文字，只展示）、
+`tool_call`（`RUNNING` / `SUCCEEDED`）、`segment_boundary`（把已显示的正文降级为思考过程）、
+`error`、`done`。
+
+```bash
+# -N 关闭 curl 自己的缓冲，否则看不到实时效果
+curl -N -H "Accept: text/event-stream" \
+  "http://localhost:8080/test/chat/stream/events?model=1&userInput=现在几点？&conversationId=1"
+```
+
+实现细节与设计取舍见 [`流式工具状态.md`](../docs/03-会话与记忆/流式工具状态.md)。
 
 ## 技能包（Skill）
 

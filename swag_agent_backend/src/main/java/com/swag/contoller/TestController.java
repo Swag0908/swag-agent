@@ -1,19 +1,27 @@
 package com.swag.contoller;
 
 import com.swag.audit.context.AuditContextHolder;
+import com.swag.audit.context.AuditRequestContext;
 import com.swag.auth.UserContextHolder;
 import com.swag.chat.ChatConversationDO;
 import com.swag.chat.ChatHistoryRepository;
+import com.swag.chat.stream.ChatStreamBridge;
+import com.swag.chat.stream.SseEvents;
+import com.swag.chat.stream.ToolEventRelay;
 import com.swag.memory.UserMemoryService;
 import com.swag.skill.SkillAssembler;
 import io.micrometer.tracing.Span;
 import io.micrometer.tracing.Tracer;
 import com.swag.tool.SelectModelTool;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.client.ChatClientResponse;
 import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -22,12 +30,16 @@ import org.springframework.web.server.ResponseStatusException;
 import reactor.core.publisher.Flux;
 
 import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
 @RestController
 @RequestMapping("test")
 public class TestController {
+
+    private static final Logger log = LoggerFactory.getLogger(TestController.class);
+
     @Autowired
     private SelectModelTool selectModelTool;
 
@@ -40,6 +52,14 @@ public class TestController {
     /** 技能包注入（网上下载的 SKILL.md 即插即用，无需为每个技能写 Java）。 */
     @Autowired
     private SkillAssembler skillAssembler;
+
+    /** 把模型流翻译成 SSE 事件流（内容 / 思考过程 / 工具状态）。 */
+    @Autowired
+    private ChatStreamBridge chatStreamBridge;
+
+    /** 工具执行观测 → 聊天流的投递通道（模型响应里看不到工具调用，见该类注释）。 */
+    @Autowired
+    private ToolEventRelay toolEventRelay;
 
     @Autowired
     private Tracer tracer;
@@ -125,6 +145,90 @@ public class TestController {
                     }
                 });
         return AuditContextHolder.propagate(content);
+    }
+
+    /**
+     * 带「干活过程」的流式聊天接口（Server-Sent Events）。
+     *
+     * <p>与 {@link #chatStream} 的区别只有输出格式：这里不只回正文，还把「正在思考 / 正在调用哪个工具 /
+     * 哪个工具跑完了」实时推给前端。事件类型见 {@code com.swag.chat.stream.ChatStreamEvent}。
+     *
+     * <p>前端用 {@code Accept: text/event-stream} 请求；旧调用方（curl、text/plain 客户端）
+     * 继续走 {@link #chatStream}，互不影响。
+     *
+     * <p>落库规则：中间过程（推理铺垫、工具状态）只用于展示；只有最终回答写进会话历史，
+     * 保证刷新/重开会话后看到的还是干净的问答。
+     */
+    @GetMapping(value = "/chat/stream/events", produces = "text/event-stream;charset=UTF-8")
+    public Flux<ServerSentEvent<String>> chatStreamEvents(
+            @RequestParam(value = "model", defaultValue = "1") Integer model,
+            @RequestParam(value = "userInput") String userInput,
+            @RequestParam(value = "conversationId", required = false) Long conversationId) {
+        Long userId = UserContextHolder.currentUserId();
+        ChatConversationDO conversation = resolveConversation(conversationId, userId);
+        ChatClient chatClient = selectModelTool.selectModel(model);
+
+        LocalDateTime startedAt = LocalDateTime.now();
+        if (conversation != null) {
+            persistUserMessage(conversation, userId, userInput, startedAt);
+        }
+
+        // ⚠️ 「组装 ChatClient 请求」必须带着审计上下文执行。
+        // 审计上下文是 ThreadLocal（AuditAdvisor 等 advisor 会读它，读不到就抛
+        // 「No audit context is active」）。这里在请求线程上把它捕获下来，
+        // 订阅时先重新打开再组装，不再依赖订阅线程上的隐式恢复——线上就是在这里炸的。
+        AuditRequestContext auditContext = AuditContextHolder.current().orElse(null);
+        Flux<ChatClientResponse> responses = Flux.defer(() -> {
+            try (AuditContextHolder.Scope ignored = AuditContextHolder.open(auditContext)) {
+                return chatClient.prompt().system(buildSystemPrompt(userId, userInput)).user(userInput)
+                        .advisors(a -> a.param(ChatMemory.CONVERSATION_ID, memoryConversationId(conversationId, userId)))
+                        .toolContext(toolContext())
+                        .stream().chatClientResponse();
+            }
+        });
+
+        Map<String, Object> ready = new LinkedHashMap<>();
+        ready.put("conversation_id", conversation == null ? null : conversation.getId());
+
+        // 工具状态无法从模型响应里得到（原因见 ToolEventRelay 注释），只能靠审计上下文里的
+        // auditId 把「工具执行观测」和「这条聊天流」关联起来，所以先给它开一个信箱。
+        ToolEventRelay.Session toolSession = toolEventRelay.open(currentAuditId());
+        ChatStreamBridge.SseStream stream = chatStreamBridge.bridge(responses, toolSession, ready);
+
+        return AuditContextHolder.propagate(stream.events()
+                .onErrorResume(e -> {
+                    // 模型/工具出错时模型流会中断：给前端一个明确的 error 事件，
+                    // 已经生成的内容保留，本轮照样落库（避免重开会话时对不上）。
+                    Map<String, Object> payload = new LinkedHashMap<>();
+                    payload.put("message", e.getMessage() == null ? "服务异常" : e.getMessage());
+                    return Flux.just(SseEvents.of(SseEvents.EVENT_ERROR, payload));
+                })
+                .doFinally(signal -> {
+                    toolEventRelay.close(toolSession);
+                    if (conversation == null) {
+                        return;
+                    }
+                    // 落库失败不能污染已经推完的 SSE：这里兜住异常只记日志，
+                    // 否则客户端会看到流异常中断（而不是正常的 done 事件）。
+                    try {
+                        String answer = stream.content().get();
+                        if (!answer.isBlank()) {
+                            chatHistoryRepository.insertMessage(conversation.getId(), userId,
+                                    "assistant", answer, LocalDateTime.now());
+                        }
+                        chatHistoryRepository.touchConversation(conversation.getId(), LocalDateTime.now());
+                    }
+                    catch (RuntimeException e) {
+                        log.warn("保存本轮助手回复失败：{}", e.getMessage());
+                    }
+                }));
+    }
+
+    /** 当前请求的审计 id；没有审计上下文时返回 null（此时不做工具状态展示）。 */
+    private String currentAuditId() {
+        return AuditContextHolder.current()
+                .map(context -> context.auditId().toString())
+                .orElse(null);
     }
 
     /**

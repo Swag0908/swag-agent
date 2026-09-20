@@ -6,7 +6,11 @@ import DOMPurify from 'dompurify'
 import {
   getTree,
   getNote,
+  createNote,
   saveNote,
+  getNoteImportConfig,
+  importLocalNotes,
+  uploadNotes,
   deleteNote,
   createDir,
   deleteFolder,
@@ -16,7 +20,7 @@ import {
   deleteTrashEntry,
   clearTrashAll
 } from '../api/notes'
-import { getUser, clearAuth } from '../auth'
+import { getUser, clearAuth, authHeaders } from '../auth'
 import { currentTheme, applyTheme } from '../theme'
 import { logout as logoutApi } from '../api/auth'
 
@@ -43,6 +47,15 @@ const treeError = ref('')
 const selectedDir = ref('')
 // 目录树只允许一个高亮项，与当前仍在编辑器中打开的笔记分开管理
 const selectedPath = ref('')
+
+// ---------------- 批量导入 ----------------
+const importModal = ref(false)
+const importPaths = ref('')
+const importBusy = ref(false)
+const importReport = ref('')
+const markdownPicker = ref(null)
+const folderPicker = ref(null)
+const importRoots = ref([])
 
 // ---------------- 回收站 ----------------
 const trashOpen = ref(false)
@@ -125,6 +138,85 @@ function noteParent() {
 }
 function dirParent() {
   return folderContext()
+}
+
+// 导入严格使用当前高亮上下文：选中笔记时是其所在文件夹，选中文件夹时就是该文件夹。
+function importTarget() {
+  return selectedDir.value || UNCLASSIFIED
+}
+
+async function openImport() {
+  importPaths.value = ''
+  importReport.value = ''
+  importModal.value = true
+  try {
+    importRoots.value = (await getNoteImportConfig())?.localRoots || []
+  } catch {
+    importRoots.value = []
+  }
+}
+
+function closeImport() {
+  if (importBusy.value) return
+  importModal.value = false
+  importReport.value = ''
+}
+
+function formatImportReport(result) {
+  const lines = []
+  if (result?.imported?.length) {
+    lines.push(`已导入 ${result.imported.length} 篇：${result.imported.join('、')}`)
+    lines.push(`已复制附件 ${result.attachmentsCopied || 0} 个`)
+  }
+  for (const failure of result?.failed || []) {
+    lines.push(`失败：${failure.source} — ${failure.reason}`)
+  }
+  for (const warning of result?.warnings || []) lines.push(`提示：${warning}`)
+  return lines.join('\n') || '没有可导入的 Markdown 文件'
+}
+
+async function finishImport(result) {
+  importReport.value = formatImportReport(result)
+  if (!result?.imported?.length) return
+  await loadTree()
+  const first = result.imported[0]
+  selectedDir.value = parentOf(first)
+  selectedPath.value = first
+  ensureVisible(first)
+  await openNote(first)
+  toast(`已导入 ${result.imported.length} 篇笔记，复制 ${result.attachmentsCopied || 0} 个附件`)
+}
+
+async function submitLocalImport() {
+  const paths = importPaths.value.split(/\r?\n/).map((p) => p.trim()).filter(Boolean)
+  if (!paths.length) {
+    importReport.value = '请填写至少一个本地 .md 绝对路径，每行一个'
+    return
+  }
+  importBusy.value = true
+  importReport.value = ''
+  try {
+    await finishImport(await importLocalNotes(paths, importTarget()))
+  } catch (e) {
+    importReport.value = e?.message || '本地路径导入失败'
+  } finally {
+    importBusy.value = false
+  }
+}
+
+async function onImportFiles(event) {
+  const files = Array.from(event.target.files || [])
+  event.target.value = ''
+  if (!files.length || importBusy.value) return
+  importBusy.value = true
+  importReport.value = ''
+  try {
+    await finishImport(await uploadNotes(files, importTarget()))
+  } catch (e) {
+    importReport.value = e?.message || '文件上传导入失败'
+  } finally {
+    importBusy.value = false
+  }
 }
 
 // 顶层「未分类」是系统文件夹：不可删除/改名/拖走
@@ -221,6 +313,13 @@ function nameAvailableIn(folderPath, name) {
   if (!folder) return true
   const low = name.toLowerCase()
   return !(folder.children || []).some((c) => c.name.toLowerCase() === low)
+}
+
+// 新建重名检查：大小写敏感，与后端 Files.exists 语义一致（大小写不敏感的文件系统由后端 409 兜底）
+function findChildIn(folderPath, name) {
+  const folder = findNodeByPath(tree.value, folderPath)
+  if (!folder) return null
+  return (folder.children || []).find((c) => c.name === name) || null
 }
 
 // 目标目录下自动找一个可用文件名（重名加 " (n)"，n 从 1 递增）
@@ -514,7 +613,24 @@ async function submitModal() {
     if (m.mode === 'file') {
       const name = raw.toLowerCase().endsWith('.md') ? raw : raw + '.md'
       const path = joinPath(m.parent, name)
-      await saveNote(path, `# ${baseName(path).replace(/\.md$/i, '')}\n\n`)
+      // 重名只提示、不覆盖：先用本地目录树拦一次给出即时反馈，后端 409 再兜底（目录树可能已过期）
+      const occupied = findChildIn(m.parent, name)
+      if (occupied) {
+        modalError.value = occupied.dir
+          ? `已存在同名文件夹「${name}」，请换个名字`
+          : `已存在同名笔记「${name}」，请换个名字或直接打开它编辑`
+        return
+      }
+      try {
+        await createNote(path, `# ${baseName(path).replace(/\.md$/i, '')}\n\n`)
+      } catch (e) {
+        if ((e?.message || '').includes('已存在同名')) {
+          modalError.value = `已存在同名笔记「${name}」，请换个名字`
+          loadTree() // 同步最新目录树，让用户看到冲突的那篇笔记
+          return
+        }
+        throw e
+      }
       await loadTree()
       selectedDir.value = m.parent
       selectedPath.value = path
@@ -709,6 +825,67 @@ function toast(msg) {
 // ---------------- 顶部动作 ----------------
 const previewEl = ref(null)
 
+// 导入资源接口需要 Bearer Token；图片转成临时 blob URL 展示，附件点击时认证下载。
+// Token 不会被写进 Markdown、DOM 链接或浏览器地址栏。
+const importedResourceCache = new Map()
+const importedObjectUrls = new Set()
+
+function isImportedResource(url) {
+  return typeof url === 'string' && url.startsWith('/api/notes/resource?')
+}
+
+async function importedResourceUrl(url) {
+  if (importedResourceCache.has(url)) return importedResourceCache.get(url)
+  const pending = fetch(url, { headers: authHeaders() }).then(async (response) => {
+    if (!response.ok) throw new Error(`附件读取失败 (HTTP ${response.status})`)
+    const objectUrl = URL.createObjectURL(await response.blob())
+    importedObjectUrls.add(objectUrl)
+    return objectUrl
+  }).catch((error) => {
+    importedResourceCache.delete(url)
+    throw error
+  })
+  importedResourceCache.set(url, pending)
+  return pending
+}
+
+let resourceHydrateSeq = 0
+async function hydrateImportedImages() {
+  const seq = ++resourceHydrateSeq
+  await nextTick()
+  const images = document.querySelectorAll('.notes-app .md-preview img')
+  for (const image of images) {
+    const original = image.getAttribute('src')
+    if (!isImportedResource(original)) continue
+    try {
+      const objectUrl = await importedResourceUrl(original)
+      if (seq === resourceHydrateSeq && image.isConnected && image.getAttribute('src') === original) {
+        image.setAttribute('src', objectUrl)
+      }
+    } catch {
+      image.setAttribute('alt', `${image.getAttribute('alt') || '图片'}（加载失败）`)
+    }
+  }
+}
+
+async function onPreviewClick(event) {
+  const anchor = event.target.closest?.('a')
+  const original = anchor?.getAttribute('href')
+  if (!isImportedResource(original)) return
+  event.preventDefault()
+  try {
+    const objectUrl = await importedResourceUrl(original)
+    const download = document.createElement('a')
+    download.href = objectUrl
+    download.download = new URL(original, window.location.origin).searchParams.get('name') || 'attachment'
+    download.click()
+  } catch (e) {
+    toast(e?.message || '附件下载失败')
+  }
+}
+
+watch([rendered, viewMode], hydrateImportedImages, { flush: 'post' })
+
 async function logout() {
   try {
     await logoutApi()
@@ -738,6 +915,9 @@ onBeforeUnmount(() => {
   window.removeEventListener('beforeunload', flushSave)
   clearTimeout(saveTimer)
   flushSave()
+  for (const url of importedObjectUrls) URL.revokeObjectURL(url)
+  importedObjectUrls.clear()
+  importedResourceCache.clear()
 })
 </script>
 
@@ -809,6 +989,30 @@ onBeforeUnmount(() => {
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z" /><path d="M12 11v5M9.5 13.5h5" /></svg>
             </button>
+            <button
+              class="icon-btn small"
+              :title="'导入 Markdown（目标：' + importTarget() + '）'"
+              @click="openImport"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12" /><path d="m7 10 5 5 5-5" /><path d="M5 21h14" /></svg>
+            </button>
+            <input
+              ref="markdownPicker"
+              class="visually-hidden"
+              type="file"
+              accept=".md,text/markdown"
+              multiple
+              @change="onImportFiles"
+            />
+            <input
+              ref="folderPicker"
+              class="visually-hidden"
+              type="file"
+              webkitdirectory
+              directory
+              multiple
+              @change="onImportFiles"
+            />
           </div>
         </div>
 
@@ -950,13 +1154,13 @@ onBeforeUnmount(() => {
           </section>
 
           <section ref="previewEl" class="preview-scroll edit-preview" aria-label="Markdown 实时渲染区">
-            <article class="markdown md-preview" v-html="rendered"></article>
+            <article class="markdown md-preview" v-html="rendered" @click="onPreviewClick"></article>
           </section>
         </div>
 
         <!-- 预览模式：只剩渲染后的成品 -->
         <div v-else-if="hasFile && viewMode === 'preview'" ref="previewEl" class="preview-scroll preview-only">
-          <article class="markdown md-preview" v-html="rendered"></article>
+          <article class="markdown md-preview" v-html="rendered" @click="onPreviewClick"></article>
         </div>
 
         <div v-else class="pane-empty">
@@ -968,6 +1172,50 @@ onBeforeUnmount(() => {
           <button class="primary-mini" type="button" @click="openNewNote()">＋ 新建笔记</button>
         </div>
       </section>
+    </div>
+
+    <!-- Markdown 批量导入 -->
+    <div v-if="importModal" class="modal-mask" @click.self="closeImport">
+      <div class="modal-card import-card">
+        <h3>导入 Markdown 笔记</h3>
+        <p class="modal-sub">目标文件夹：{{ importTarget() }} · 同名自动加序号，不覆盖已有笔记</p>
+
+        <div class="import-choice-grid">
+          <button type="button" class="choice" :disabled="importBusy" @click="markdownPicker?.click()">
+            <strong>选择多个 Markdown</strong>
+            <span>一次选择多篇 .md；浏览器未授权的旁边附件无法读取</span>
+          </button>
+          <button type="button" class="choice" :disabled="importBusy" @click="folderPicker?.click()">
+            <strong>选择文件夹（推荐）</strong>
+            <span>导入文件夹内全部 .md，并复制它们引用的图片、脚本和附件</span>
+          </button>
+        </div>
+
+        <label class="import-path-label" for="local-import-paths">启动机器上的本地路径（每行一个）</label>
+        <textarea
+          id="local-import-paths"
+          v-model="importPaths"
+          class="import-paths"
+          rows="5"
+          placeholder="/Users/chenguangyao/Documents/笔记一.md&#10;/Users/chenguangyao/Documents/项目/笔记二.md"
+          :disabled="importBusy"
+          @input="importReport = ''"
+        ></textarea>
+        <p class="modal-sub">
+          只允许读取：
+          <code v-if="importRoots.length">{{ importRoots.join('、') }}</code>
+          <span v-else>后端配置的导入目录</span>
+          下的文件及其本地附件。
+        </p>
+        <p v-if="importReport" class="import-report">{{ importReport }}</p>
+
+        <div class="modal-actions">
+          <button class="nav-btn" type="button" :disabled="importBusy" @click="closeImport">关闭</button>
+          <button class="primary-mini" type="button" :disabled="importBusy" @click="submitLocalImport">
+            {{ importBusy ? '导入中…' : '按路径导入' }}
+          </button>
+        </div>
+      </div>
     </div>
 
     <!-- 新建 / 重命名弹窗 -->
@@ -983,6 +1231,7 @@ onBeforeUnmount(() => {
             autofocus
             @keydown.enter="submitModal"
             @keydown.esc="closeModal"
+            @input="modalError = ''"
           />
           <span v-if="modal.mode === 'file' && modalValue && !modalValue.toLowerCase().endsWith('.md')" class="ext-hint">.md</span>
         </div>
@@ -1979,6 +2228,67 @@ onBeforeUnmount(() => {
   color: #17140c;
   font-weight: 650;
 }
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+.import-card {
+  width: min(620px, calc(100vw - 28px));
+}
+.import-choice-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 14px 0 16px;
+}
+.import-choice-grid .choice {
+  min-height: 92px;
+}
+.import-path-label {
+  display: block;
+  margin-bottom: 7px;
+  color: var(--text-2);
+  font-size: 12.5px;
+  font-weight: 650;
+}
+.import-paths {
+  width: 100%;
+  resize: vertical;
+  min-height: 112px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  outline: none;
+  background: var(--bg-2);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.65;
+}
+.import-paths:focus {
+  border-color: var(--accent);
+}
+.import-report {
+  max-height: 180px;
+  overflow: auto;
+  margin-top: 10px;
+  padding: 9px 11px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--bg-2);
+  color: var(--text-2);
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
 @media (max-width: 700px) {
   .edit-split {
     grid-template-columns: minmax(0, 1fr);
@@ -1992,6 +2302,9 @@ onBeforeUnmount(() => {
   .edit-preview {
     border-left: none;
     border-top: 1px solid var(--border);
+  }
+  .import-choice-grid {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 @media (max-width: 560px) {

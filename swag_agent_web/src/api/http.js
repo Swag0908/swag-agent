@@ -3,6 +3,7 @@ import { authHeaders, clearAuth } from '../auth'
 
 export async function api(path, { method = 'GET', body, headers = {}, timeoutMs = 0 } = {}) {
   const controller = timeoutMs > 0 ? new AbortController() : null
+  const multipart = typeof FormData !== 'undefined' && body instanceof FormData
   const timeoutId = controller
     ? window.setTimeout(() => controller.abort(), timeoutMs)
     : null
@@ -11,11 +12,11 @@ export async function api(path, { method = 'GET', body, headers = {}, timeoutMs 
     const res = await fetch('/api' + path, {
       method,
       headers: {
-        'Content-Type': 'application/json',
+        ...(multipart ? {} : { 'Content-Type': 'application/json' }),
         ...authHeaders(),
         ...headers
       },
-      body: body === undefined ? undefined : JSON.stringify(body),
+      body: body === undefined ? undefined : multipart ? body : JSON.stringify(body),
       signal: controller?.signal
     })
 

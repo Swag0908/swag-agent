@@ -61,6 +61,8 @@ export async function streamChat({ model, message, conversationId, signal, onDel
     let data = {}
     try {
       data = JSON.parse(dataLines.join('\n'))
+      // Python 发送扁平对象；保留 Java 包装格式的兼容性，部署回滚后仍可流式聊天。
+      data = data.data ?? data
     } catch {
       // 数据不是 JSON（理论上不会发生）：当作纯文本增量，别丢掉内容
       onDelta?.(dataLines.join('\n'))

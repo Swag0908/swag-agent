@@ -57,3 +57,11 @@ skills-data/
 
 ### 本地文档与生成产物（架构图/视觉检查图等，仅本地留存）###
 /docs/
+
+### 本地临时环境与发布缓存 ###
+.wm_tmp/
+/ops/.cache/
+/ops/local.env
+__pycache__/
+*.py[cod]
+*.egg-info/

@@ -1,0 +1,10 @@
+{
+  "release_id": "7974db67e978-c5129ddb9c85",
+  "source_commit": "7974db67e978514130f1281d477b8c753a6b63dc",
+  "working_tree_diff_sha256": "665e9c7d3fb6e579fcef42cec19d2aab6aa7a8435fe721a5f684ebdba35d240d",
+  "built_at": "2026-10-29T14:26:35.662576+00:00",
+  "python": "3.12",
+  "frontend_index_sha256": "c9f88c4da722256236eff7ae01b70b138b1d8860f0cc09e576a53c6184a8820b",
+  "verification": "pytest + pnpm frozen install/build; production checks run on deployment",
+  "known_gap": "Python does not export new traces to Zipkin yet; audit endpoints remain available"
+}

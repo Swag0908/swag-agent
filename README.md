@@ -6,7 +6,10 @@
 swag_agent/
 ├── README.md
 ├── swag_agent_backend/   # 后端：Spring Boot + Spring AI + DeepSeek（端口 8080）
-└── swag_agent_web/       # 前端：Vite + Vue 3 流式聊天界面（端口 5173）
+├── swag_agent_backend_py/ # 后端：Python / FastAPI（端口 8081）
+├── swag_agent_web/       # 前端：Vite + Vue 3 流式聊天界面（端口 5173）
+├── ops/                 # 构建、旁路验收、统一部署和回滚
+└── release/             # 已构建的 Python wheel 与前端静态发布包
 ```
 
 远程仓库：`git@github.com:Swag0908/swag-agent.git`
@@ -31,8 +34,9 @@ pnpm install
 pnpm dev
 ```
 
-浏览器打开 **http://localhost:5173**。前端通过 Vite 代理把 `/api/*` 转发到后端
-`http://localhost:8080`，无需在后端配置 CORS。
+浏览器打开 **http://localhost:5173**。当前 Vite 代理把 `/api/*` 转发到 Python 后端
+`http://localhost:8081`；如运行上述 Java 示例，请把代理改为 `8080`。生产迁移与发布请使用
+[统一部署说明](ops/README.md)，`./ops/deploy.sh check` 可先只读检查服务器。
 
 ## Git 约定
 

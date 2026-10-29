@@ -1,0 +1,36 @@
+[project]
+name = "swag-agent-backend-py"
+version = "0.1.0"
+description = "swag_agent Python/FastAPI backend (contract-compatible rewrite of the Java backend)"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "openai>=1.40",
+    "sqlalchemy>=2.0",
+    "pymysql>=1.1",
+    "psycopg[binary]>=3.2",
+    "pgvector>=0.3",
+    "pydantic-settings>=2.4",
+    "httpx>=0.27",
+    "pyyaml>=6.0",
+    "bcrypt>=4.1",
+    "apscheduler>=3.10",
+    "python-multipart>=0.0.9",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24",
+    "respx>=0.21",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+filterwarnings = ["ignore::DeprecationWarning"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"

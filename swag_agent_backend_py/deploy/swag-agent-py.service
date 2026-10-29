@@ -1,0 +1,20 @@
+[Unit]
+Description=swag_agent Python backend (FastAPI)
+After=network.target mysql.service postgresql.service
+
+[Service]
+Type=simple
+User=swag
+WorkingDirectory=/opt/swag_agent/backend_py
+EnvironmentFile=/opt/swag_agent/backend_py/.env
+ExecStart=/opt/swag_agent/backend_py/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8081 --workers 1
+Restart=always
+RestartSec=3
+# SSE 长连接 + 工具循环，给足时间
+TimeoutStopSec=15
+LimitNOFILE=65535
+# 单机内存保护（按实际机器调整）
+MemoryMax=1G
+
+[Install]
+WantedBy=multi-user.target

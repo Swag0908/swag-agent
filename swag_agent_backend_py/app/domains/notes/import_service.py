@@ -194,6 +194,7 @@ class _BatchBudget:
 
 
 class _BatchResult:
+    """收集批量导入的成功路径、失败原因、警告和附件数量，允许部分成功。"""
     def __init__(self) -> None:
         self.imported: list[str] = []
         self.failed: list[views.ImportFailure] = []
@@ -225,6 +226,7 @@ class _ResourceBundle:
     # ---- 复制 ----
 
     def copy_local(self, source: Path) -> str:
+        """复制一份本地附件；同一来源只复制一次，同时计入单次导入预算。"""
         key = str(source)
         existing = self._copied.get(key)
         if existing is not None:
@@ -237,6 +239,7 @@ class _ResourceBundle:
         return self._remember(key, target.name)
 
     def copy_upload(self, relative_path: str, part: UploadPart) -> str:
+        """将上传附件写入当前资源包；相同相对路径只复制一次。"""
         existing = self._copied.get(relative_path)
         if existing is not None:
             return existing
@@ -289,6 +292,7 @@ class NotesImportService:
     # ---------- 配置 ----------
 
     def config(self) -> views.ImportConfig:
+        """返回后端机器允许本地路径导入的根目录，供前端显示。"""
         return views.ImportConfig(_configured_import_roots())
 
     # ---------- 本地路径导入 ----------
@@ -299,6 +303,10 @@ class NotesImportService:
         source_paths: list[str] | None,
         target_dir: str | None,
     ) -> views.ImportResult:
+        """从后端机器的允许目录读取 Markdown 和附件，改写链接后逐篇保存。
+
+        单篇失败记入结果，继续其他来源；这里的本地路径不是浏览器用户电脑上的路径。
+        """
         requested = [
             path.strip()
             for path in (source_paths or [])
@@ -346,6 +354,7 @@ class NotesImportService:
         parts: list[UploadPart] | None,
         target_dir: str | None,
     ) -> views.ImportResult:
+        """接收浏览器已经上传的文件，以相对路径找到引用附件，逐篇导入并汇总结果。"""
         if not parts:
             raise BadRequest("请选择要导入的文件")
         files: dict[str, UploadPart] = {}
@@ -396,6 +405,7 @@ class NotesImportService:
     # ---------- 附件读取 ----------
 
     def resource(self, user_id: int | None, bundle_id: str | None, name: str | None) -> views.ResourceView:
+        """从当前用户的附件包读取资源，检查编号、文件名及实际路径边界。"""
         if bundle_id is None or not _BUNDLE_ID_RE.fullmatch(bundle_id):
             raise BadRequest("资源编号非法")
         if (
@@ -426,6 +436,7 @@ class NotesImportService:
     # ---------- 内部：链接改写 ----------
 
     def _rewrite_links(self, markdown: str, importer: object) -> str:
+        """依次处理 Markdown、引用式、HTML 和 Wiki 嵌入链接，替换为复制后的资源地址。"""
         rewritten = _replace_targets(markdown, _INLINE_LINK, importer)
         rewritten = _replace_targets(rewritten, _REFERENCE_LINK, importer)
         rewritten = _replace_targets(rewritten, _HTML_LINK, importer)
@@ -502,6 +513,7 @@ class NotesImportService:
         return roots
 
     def _allowed_local_file(self, requested: Path, roots: list[Path], *, markdown: bool) -> Path:
+        """解析真实路径后验证其位于允许导入根目录，拒绝读取范围外文件。"""
         if not requested.is_absolute():
             raise BadRequest(f"本地导入必须使用绝对路径：{requested}")
         real = requested.resolve(strict=True)

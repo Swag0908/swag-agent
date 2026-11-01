@@ -74,6 +74,7 @@ def _skill_guide(db: Any) -> str:
 
 
 def _user_memories(db: Any, user_id: int | None, user_input: str) -> list[str]:
+    """读取与当前问题相关的用户事实；读取失败或没有用户身份时跳过。"""
     if user_id is None:
         return []
     try:
@@ -95,6 +96,7 @@ def build_prompt_parts(
     *,
     long_term: list[str] | None = None,
 ) -> PromptParts:
+    """把助手规则、启用技能、用户事实和会话语义记忆拼成系统提示词，并保留分段视图。"""
     parts = [SYSTEM_PROMPT]
     skill = _skill_guide(db)
     if skill:
@@ -125,6 +127,7 @@ def build_system_prompt(
     *,
     long_term: list[str] | None = None,
 ) -> str:
+    """返回本轮交给模型的系统提示词；它提供规则和背景，不会重新训练模型。"""
     return build_prompt_parts(db, user_id, user_input, long_term=long_term).system_prompt
 
 

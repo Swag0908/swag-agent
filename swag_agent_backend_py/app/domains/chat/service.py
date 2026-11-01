@@ -72,6 +72,7 @@ def _load_rebuild_memory() -> Callable[[Session, int, int], None] | None:
 
 
 def _rebuild_memory_safely(db: Session, conversation_id: int, user_id: int) -> None:
+    """删除历史后尝试同步记忆副本；重建失败只记日志，不撤销历史删除。"""
     rebuild = _load_rebuild_memory()
     if rebuild is None:
         return
@@ -82,6 +83,7 @@ def _rebuild_memory_safely(db: Session, conversation_id: int, user_id: int) -> N
 
 
 def conversation_response(conversation: ChatConversation) -> dict:
+    """将会话对象转成前端字段，时间统一为毫秒时间戳。"""
     return {
         "id": conversation.id,
         "title": conversation.title or "",
@@ -96,6 +98,7 @@ def conversation_response(conversation: ChatConversation) -> dict:
 
 
 def message_response(message: ChatMessage) -> dict:
+    """将一条消息转成前端展示字段。"""
     return {"id": message.id, "role": message.role, "content": message.content}
 
 
@@ -105,15 +108,18 @@ def _now_second() -> datetime:
 
 
 def list_conversations(db: Session, user_id: int) -> list[dict]:
+    """只列出当前用户的会话，排序交给数据访问层。"""
     return [conversation_response(row) for row in repository.list_conversations(db, user_id)]
 
 
 def create_conversation(db: Session, user_id: int, title: str | None) -> dict:
+    """先创建空会话目录；发送首条提问时可自动生成标题。"""
     conversation = repository.create_conversation(db, user_id, title or "", _now_second())
     return conversation_response(conversation)
 
 
 def _require_conversation(db: Session, user_id: int, conversation_id: int) -> ChatConversation:
+    """同时检查存在性和用户归属，越权与不存在统一返回“会话不存在”。"""
     conversation = repository.get_conversation(db, conversation_id, user_id)
     if conversation is None:
         raise NotFound("会话不存在")
@@ -121,6 +127,7 @@ def _require_conversation(db: Session, user_id: int, conversation_id: int) -> Ch
 
 
 def list_messages(db: Session, user_id: int, conversation_id: int) -> list[dict]:
+    """先确认会话属于当前用户，再按顺序返回其中的消息。"""
     _require_conversation(db, user_id, conversation_id)
     return [message_response(row) for row in repository.list_messages(db, conversation_id)]
 
@@ -139,6 +146,7 @@ def _delete_audit_events(db: Session, conversation_id: int) -> None:
 
 
 def delete_conversation(db: Session, user_id: int, conversation_id: int) -> None:
+    """删除自己的会话和正文，再尽力清理对应记忆及审计记录。"""
     if not repository.delete_conversation(db, conversation_id, user_id):
         raise NotFound("会话不存在")
     # 删除后记忆应从「空历史」重建（等价 Java clearAssistantMemory）。
@@ -147,6 +155,7 @@ def delete_conversation(db: Session, user_id: int, conversation_id: int) -> None
 
 
 def clear_all(db: Session, user_id: int) -> dict:
+    """删除当前用户全部会话，并逐个清理记忆和审计副本。"""
     deleted_ids = repository.delete_all_conversations(db, user_id)
     for conversation_id in deleted_ids:
         _rebuild_memory_safely(db, conversation_id, user_id)
@@ -173,6 +182,7 @@ def _resolve_favorite_order(db: Session, user_id: int, conversation: ChatConvers
 def set_favorite(
     db: Session, user_id: int, conversation_id: int, favorite: bool | None, note: str | None
 ) -> dict:
+    """保存收藏开关、备注和顺序；取消收藏时清空收藏相关信息。"""
     if favorite is None:
         raise BadRequest("缺少 favorite 参数")
     conversation = _require_conversation(db, user_id, conversation_id)
@@ -193,6 +203,7 @@ def set_favorite(
 
 
 def reorder_favorites(db: Session, user_id: int, ordered_ids: Sequence[int] | None) -> list[dict]:
+    """更新当前用户已有收藏的顺序，再返回会话列表。"""
     repository.reorder_favorites(db, user_id, list(ordered_ids) if ordered_ids else None)
     return list_conversations(db, user_id)
 
@@ -212,6 +223,7 @@ def paired_message_ids(messages: Sequence[ChatMessage], index: int) -> list[int]
 
 
 def delete_message_pair(db: Session, user_id: int, conversation_id: int, message_id: int) -> list[dict]:
+    """删除目标消息及相邻配对的提问/回答，然后从剩余历史重建记忆。"""
     _require_conversation(db, user_id, conversation_id)
     messages = repository.list_messages(db, conversation_id)
     index = next((i for i, message in enumerate(messages) if message.id == message_id), -1)

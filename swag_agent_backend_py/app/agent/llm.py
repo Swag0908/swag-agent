@@ -40,6 +40,7 @@ def model_for(model_id: int) -> str:
 
 
 def get_client() -> AsyncOpenAI:
+    """按需创建并复用 DeepSeek 异步客户端；使用 OpenAI SDK 的兼容协议访问配置地址。"""
     global _client
     if _client is None:
         _client = AsyncOpenAI(
@@ -58,6 +59,7 @@ def reset_client() -> None:
 
 
 def _request_kwargs(messages: list[dict[str, Any]], model: str) -> dict[str, Any]:
+    """把消息、模型和工具说明组装成模型请求；传的是工具参数说明，不是 Python 函数源码。"""
     load_all()
     tools = openai_tools()
     kwargs: dict[str, Any] = {

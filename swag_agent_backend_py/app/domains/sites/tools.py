@@ -72,6 +72,7 @@ def _session():  # noqa: ANN202 - 便于测试 monkeypatch
 
 
 def _run(fn, *args):  # noqa: ANN001
+    """在工作线程中新建数据库会话执行网站业务，避免同步查询阻塞聊天流。"""
     def call():
         with _session() as db:
             return fn(db, *args)
@@ -494,6 +495,7 @@ def _delete_site_folder(db, uid, folder_ref, cascade) -> str:  # noqa: ANN001
 
 @tool(name="listSiteFolders", description=LIST_FOLDERS_DESC, parameters=EMPTY_PARAMS, side_effect="read")
 async def list_site_folders(ctx: ToolCtx) -> str:
+    """把当前用户的分类树转成含 #id 的文字，方便模型后续指定分类。"""
     uid = _user_id(ctx)
     if uid is None:
         return "未登录，无法操作常用网站"
@@ -517,6 +519,7 @@ async def list_site_folders(ctx: ToolCtx) -> str:
     side_effect="read",
 )
 async def list_site_bookmarks(keyword: str, categoryId: str, ctx: ToolCtx) -> str:  # noqa: N803
+    """按关键字或分类列出网站，返回模型可阅读的文本。"""
     uid = _user_id(ctx)
     if uid is None:
         return "未登录，无法操作常用网站"
@@ -556,6 +559,7 @@ async def add_site_bookmark(
     createCategoryIfMissing: bool,  # noqa: N803
     ctx: ToolCtx,
 ) -> str:
+    """创建书签；可按参数选择已有分类或新建分类，重复网址由同步实现处理。"""
     uid = _user_id(ctx)
     if uid is None:
         return "未登录，无法操作常用网站"
@@ -587,6 +591,7 @@ async def add_site_bookmark(
 async def update_site_bookmark(
     ref: str, name: str, url: str, description: str, category: str, ctx: ToolCtx
 ) -> str:
+    """用编号、网址或名称定位自己的书签，再应用模型提供的修改字段。"""
     uid = _user_id(ctx)
     if uid is None:
         return "未登录，无法操作常用网站"
@@ -607,6 +612,7 @@ async def update_site_bookmark(
     side_effect="delete",
 )
 async def delete_site_bookmark(ref: str, ctx: ToolCtx) -> str:
+    """定位并删除自己的书签，返回结果文案；删除标签本身不触发确认。"""
     uid = _user_id(ctx)
     if uid is None:
         return "未登录，无法操作常用网站"
@@ -633,6 +639,7 @@ async def delete_site_bookmark(ref: str, ctx: ToolCtx) -> str:
     side_effect="write",
 )
 async def create_site_folder(name: str, parentCategory: str, ctx: ToolCtx) -> str:  # noqa: N803
+    """为当前用户创建分类，可指定父分类。"""
     uid = _user_id(ctx)
     if uid is None:
         return "未登录，无法操作常用网站"
@@ -662,6 +669,7 @@ async def create_site_folder(name: str, parentCategory: str, ctx: ToolCtx) -> st
 async def update_site_folder(
     folderRef: str, newName: str, parentCategory: str, ctx: ToolCtx  # noqa: N803
 ) -> str:
+    """定位分类后改名或移动，业务层防止产生目录循环。"""
     uid = _user_id(ctx)
     if uid is None:
         return "未登录，无法操作常用网站"
@@ -688,6 +696,7 @@ async def update_site_folder(
     side_effect="delete",
 )
 async def delete_site_folder(folderRef: str, cascade: bool, ctx: ToolCtx) -> str:  # noqa: N803
+    """删除分类；非空且没有 cascade 时返回原因，供模型向用户询问。"""
     uid = _user_id(ctx)
     if uid is None:
         return "未登录，无法操作常用网站"

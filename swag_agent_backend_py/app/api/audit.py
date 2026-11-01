@@ -89,6 +89,7 @@ def get_confirmation(
     _user: AuthUser = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> dict:
+    """按 UUID 读取确认票据状态；不存在按兼容约定返回 409。"""
     normalized = _require_uuid(confirmation_id, "confirmationId")
     record = confirmation.find(normalized, db=db)
     if record is None:
@@ -104,6 +105,7 @@ def decide_confirmation(
     user: AuthUser = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> dict:
+    """将批准或拒绝决策交给确认服务，校验操作者并更新票据状态。"""
     normalized = _require_uuid(confirmation_id, "confirmationId")
     decision = confirmation.parse_decision(payload.decision)
     context = _request_context(request, user)

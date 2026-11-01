@@ -49,6 +49,7 @@ def create(
     due_time,  # noqa: ANN001  datetime.time | None
     source: str | None,
 ) -> TodoItem:
+    """创建未完成待办；缺省日期为今天，同时刷新到期日统计并提交事务。"""
     if title is None or not title.strip():
         raise BadRequest("待办标题不能为空")
     now = timeutil.now()
@@ -71,14 +72,17 @@ def create(
 
 
 def list_today(db: Session, user_id: int) -> list[TodoItem]:
+    """列出当前用户今天到期的待办，包含已完成和未完成条目。"""
     return repository.list_by_date(db, user_id, timeutil.today())
 
 
 def list_by_date(db: Session, user_id: int, day: date) -> list[TodoItem]:
+    """列出当前用户指定日期到期的待办。"""
     return repository.list_by_date(db, user_id, day)
 
 
 def list_by_date_range(db: Session, user_id: int, start: date | None, end: date | None) -> list[TodoItem]:
+    """验证起止日期和最多一年的查询范围，再读取待办。"""
     if start is None or end is None or start > end:
         raise BadRequest("日期范围不正确")
     if _plus_one_year(start) < end:
@@ -95,6 +99,7 @@ def update(
     due_date: date | None,
     due_time,  # noqa: ANN001
 ) -> TodoItem:
+    """修改自己的待办；日期变动时同时刷新旧日期和新日期的统计。"""
     if title is None or not title.strip():
         raise BadRequest("待办标题不能为空")
     if due_date is None:
@@ -113,6 +118,7 @@ def update(
 
 
 def complete(db: Session, user_id: int, id_or_title: str | None) -> TodoItem:
+    """把待办标为 DONE，记录完成时间并更新统计后提交。"""
     item = resolve(db, user_id, id_or_title)
     now = timeutil.now()
     repository.complete_item(db, item, now, now)
@@ -122,6 +128,7 @@ def complete(db: Session, user_id: int, id_or_title: str | None) -> TodoItem:
 
 
 def defer(db: Session, user_id: int, id_or_title: str | None, new_date: date | None) -> TodoItem:
+    """只允许延期到更晚日期；保存延期日志并刷新相关日期统计，与待办修改一同提交。"""
     if new_date is None:
         raise BadRequest("请提供延期目标日期")
     item = resolve(db, user_id, id_or_title)
@@ -146,6 +153,7 @@ def defer(db: Session, user_id: int, id_or_title: str | None, new_date: date | N
 
 
 def delete(db: Session, user_id: int, id_or_title: str | None) -> TodoItem:
+    """删除自己的待办并刷新到期日统计，提交后返回被删条目的信息。"""
     item = resolve(db, user_id, id_or_title)
     due_date = item.due_date
     repository.delete_item(db, item)
@@ -155,6 +163,7 @@ def delete(db: Session, user_id: int, id_or_title: str | None) -> TodoItem:
 
 
 def stats(db: Session, user_id: int, start: date | None, end: date | None) -> list[TodoDailyStat]:
+    """补算范围内的历史日期统计，再返回最多一年内有活动的统计行。"""
     if start is None or end is None or start > end:
         raise BadRequest("日期范围不正确")
     if _plus_one_year(start) < end:
@@ -203,6 +212,7 @@ def _plus_one_year(value: date) -> date:
 
 
 def parse_date(value: str | None, fallback: date | None) -> date | None:
+    """将“今天”“明天”或日期文本转为 date；缺省使用调用方提供的 fallback。"""
     return timeutil.parse_due_date(value, fallback)
 
 
@@ -217,6 +227,7 @@ def parse_time(value: str | None):
 
 
 def _refresh_dates(db: Session, user_id: int, first: date | None, second: date | None) -> None:
+    """刷新受变动影响的两个日期；相同日期只计算一次。"""
     if first is not None:
         refresh_daily_stat(db, user_id, first)
     if second is not None and second != first:

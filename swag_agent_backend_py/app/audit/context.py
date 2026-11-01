@@ -45,6 +45,7 @@ def current_context() -> AuditContext | None:
 
 
 def current_audit_id() -> str | None:
+    """从当前异步执行上下文读取审计链编号，无上下文时返回 None。"""
     ctx = _CTX.get()
     return ctx.audit_id if ctx is not None else None
 
@@ -61,16 +62,19 @@ def current_user_id() -> int | None:
 
 
 def current_tenant_id() -> str:
+    """读取当前租户标识，无上下文时使用本模块约定的缺省值。"""
     ctx = _CTX.get()
     return ctx.tenant_id if ctx is not None else "default"
 
 
 def current_conversation_id() -> str | None:
+    """读取审计上下文绑定的聊天会话编号，不从模型参数中取身份。"""
     ctx = _CTX.get()
     return ctx.conversation_id if ctx is not None else None
 
 
 def current_confirmation_id() -> str | None:
+    """读取本次重试携带的确认票据编号。"""
     ctx = _CTX.get()
     return ctx.confirmation_id if ctx is not None else None
 

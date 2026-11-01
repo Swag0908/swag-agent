@@ -35,8 +35,10 @@ from app.db.base import Base
 
 
 class AppUser(Base):
-    __tablename__ = "app_user"
+    """用户账户：用户名、密码哈希、展示名和权限角色。"""
+    __tablename__ = "app_user"  # Python 类名到真实数据库表名的映射。
 
+    # Mapped[int] 描述 Python 字段类型；mapped_column 描述数据库列及主键、自增等约束。
     id: Mapped[int] = mapped_column(BigIntPK, primary_key=True, autoincrement=True)
     username: Mapped[str] = mapped_column(String(64), unique=True)
     password_hash: Mapped[str] = mapped_column(String(128))
@@ -46,6 +48,7 @@ class AppUser(Base):
 
 
 class AuthToken(Base):
+    """登录凭证：随机令牌对应哪个用户，以及何时过期。"""
     __tablename__ = "auth_token"
 
     token: Mapped[str] = mapped_column(String(36), primary_key=True)
@@ -55,6 +58,7 @@ class AuthToken(Base):
 
 
 class AppRegisterSetting(Base):
+    """注册入口的全局设置；业务约定只使用 id=1 这一行。"""
     __tablename__ = "app_register_setting"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -65,6 +69,7 @@ class AppRegisterSetting(Base):
 
 
 class ChatConversation(Base):
+    """一段聊天的目录信息：归属用户、标题、收藏和排序；正文存于 ChatMessage。"""
     __tablename__ = "chat_conversation"
     __table_args__ = (Index("idx_chat_conv_user", "user_id", "updated_at"),)
 
@@ -80,6 +85,7 @@ class ChatConversation(Base):
 
 
 class ChatMessage(Base):
+    """一条可展示的聊天消息，通过 conversation_id 归入会话，role 区分提问和回答。"""
     __tablename__ = "chat_message"
     __table_args__ = (Index("idx_chat_msg_conv", "conversation_id", "id"),)
 
@@ -92,6 +98,7 @@ class ChatMessage(Base):
 
 
 class SpringAiChatMemory(Base):
+    """兼容 Java Spring AI 的最近消息窗口；Python 正常读历史使用 ChatMessage。"""
     __tablename__ = "SPRING_AI_CHAT_MEMORY"
 
     conversation_id: Mapped[str] = mapped_column(String(36), primary_key=True)
@@ -102,6 +109,7 @@ class SpringAiChatMemory(Base):
 
 
 class ChatUserMemory(Base):
+    """用户主动要求长期记住的事实文本；这是向量副本所对应的原始记录。"""
     __tablename__ = "chat_user_memory"
     __table_args__ = (Index("idx_user_memory_user", "user_id", "updated_at"),)
 
@@ -113,6 +121,7 @@ class ChatUserMemory(Base):
 
 
 class ChatUserMemorySetting(Base):
+    """每个用户的长期记忆开关；没有设置行时由服务层视为开启。"""
     __tablename__ = "chat_user_memory_setting"
 
     user_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
@@ -121,6 +130,7 @@ class ChatUserMemorySetting(Base):
 
 
 class TodoItem(Base):
+    """一项待办及其到期时间、状态、来源和用户归属。"""
     __tablename__ = "todo_item"
     __table_args__ = (
         Index("idx_todo_user_due_status", "user_id", "due_date", "status"),
@@ -141,6 +151,7 @@ class TodoItem(Base):
 
 
 class TodoDeferLog(Base):
+    """待办延期记录，保留原日期和新日期，用于计算每天的延期数量。"""
     __tablename__ = "todo_defer_log"
     __table_args__ = (Index("idx_defer_user_from", "user_id", "from_date"),)
 
@@ -153,6 +164,7 @@ class TodoDeferLog(Base):
 
 
 class TodoDailyStat(Base):
+    """按用户和日期保存的统计结果；这两个字段共同确定一行。"""
     __tablename__ = "todo_daily_stat"
 
     stat_date: Mapped[date] = mapped_column(Date, primary_key=True)
@@ -165,6 +177,7 @@ class TodoDailyStat(Base):
 
 
 class WebsiteFolder(Base):
+    """网站分类节点；parent_id 指向父分类，空值表示顶层。"""
     __tablename__ = "website_folder"
     __table_args__ = (
         Index("idx_folder_user_parent", "user_id", "parent_id"),
@@ -181,6 +194,7 @@ class WebsiteFolder(Base):
 
 
 class WebsiteBookmark(Base):
+    """收藏的网站及其所属分类，同时保存抓取到的图标缓存。"""
     __tablename__ = "website_bookmark"
     __table_args__ = (
         Index("idx_bookmark_user_folder", "user_id", "folder_id"),
@@ -202,6 +216,7 @@ class WebsiteBookmark(Base):
 
 
 class SkillState(Base):
+    """技能启停设置；技能正文在磁盘 SKILL.md 中，不在这张表里。"""
     __tablename__ = "skill_state"
 
     skill_name: Mapped[str] = mapped_column(String(128), primary_key=True)
@@ -210,6 +225,7 @@ class SkillState(Base):
 
 
 class AuditEvent(Base):
+    """一次请求或工具活动的审计事件，通过 audit_id 串成同一条执行记录。"""
     __tablename__ = "audit_event"
     __table_args__ = (
         Index("idx_audit_event_audit_time", "audit_id", "occurred_at"),
@@ -258,6 +274,7 @@ class AuditEvent(Base):
 
 
 class AuditPayload(Base):
+    """审计原文的存储引用与摘要信息；模型定义不代表默认保存所有原文。"""
     __tablename__ = "audit_payload"
 
     payload_id: Mapped[str] = mapped_column(String(36), primary_key=True)
@@ -274,6 +291,7 @@ class AuditPayload(Base):
 
 
 class AuditRequestSummary(Base):
+    """请求摘要表的结构映射；是否写入由调用逻辑决定，模型本身不生成摘要。"""
     __tablename__ = "audit_request_summary"
 
     audit_id: Mapped[str] = mapped_column(String(36), primary_key=True)
@@ -296,6 +314,7 @@ class AuditRequestSummary(Base):
 
 
 class AuditConfirmation(Base):
+    """操作确认票据，绑定用户、工具和参数摘要，记录批准、过期和消费状态。"""
     __tablename__ = "audit_confirmation"
     __table_args__ = (
         Index("idx_audit_confirmation_audit", "audit_id"),

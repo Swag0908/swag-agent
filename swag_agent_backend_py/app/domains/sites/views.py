@@ -10,6 +10,7 @@ from app.db.models import WebsiteBookmark
 
 @dataclass
 class FolderNode:
+    """前端分类树的一个节点，包含子节点和子树书签计数。"""
     id: int
     name: str
     parent_id: int | None
@@ -20,6 +21,7 @@ class FolderNode:
 
 @dataclass
 class BookmarkView:
+    """用于返回书签信息的快照，不携带图标二进制或数据库会话。"""
     id: int
     folder_id: int | None
     name: str
@@ -33,12 +35,14 @@ class BookmarkView:
 
 @dataclass
 class Library:
+    """一次网站列表查询的结果：分类树、筛选后书签和匹配数量。"""
     folders: list[FolderNode]
     bookmarks: list[BookmarkView]
     total: int
 
 
 def bookmark_view(bookmark: WebsiteBookmark) -> BookmarkView:
+    """将数据库书签映射为展示快照。"""
     return BookmarkView(
         id=bookmark.id,
         folder_id=bookmark.folder_id,
@@ -53,6 +57,7 @@ def bookmark_view(bookmark: WebsiteBookmark) -> BookmarkView:
 
 
 def folder_to_dict(node: FolderNode) -> dict:
+    """递归转换分类树，并将下划线字段名映射为前端 camelCase。"""
     return {
         "id": node.id,
         "name": node.name,
@@ -64,6 +69,7 @@ def folder_to_dict(node: FolderNode) -> dict:
 
 
 def bookmark_to_dict(view: BookmarkView) -> dict:
+    """转换书签展示字段和时间格式，保持前端接口约定。"""
     return {
         "id": view.id,
         "folderId": view.folder_id,
@@ -78,6 +84,7 @@ def bookmark_to_dict(view: BookmarkView) -> dict:
 
 
 def library_to_dict(library: Library) -> dict:
+    """将分类树和书签快照整理为可直接返回的 JSON 数据。"""
     return {
         "folders": [folder_to_dict(node) for node in library.folders],
         "bookmarks": [bookmark_to_dict(view) for view in library.bookmarks],

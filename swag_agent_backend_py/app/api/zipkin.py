@@ -18,6 +18,7 @@ router = APIRouter(tags=["zipkin"])
 
 @router.get("/auth/zipkin-access")
 def zipkin_access(request: Request) -> Response:
+    """供 nginx 内部检查 Cookie 身份和管理员权限；204 表示允许继续访问 Zipkin。"""
     token = request.cookies.get(settings.zipkin_cookie_name)
     if not token:
         return PlainTextResponse("请先登录", status_code=401)

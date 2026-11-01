@@ -35,6 +35,7 @@ _TIMEOUT = httpx.Timeout(20.0, connect=5.0)
     side_effect="external",
 )
 async def web_search(query: str, ctx: ToolCtx) -> str:  # noqa: ARG001 - 契约要求签名带 ctx
+    """请求 Tavily 获取最多五条搜索结果，把标题、链接和摘要整理成模型能阅读的文本。"""
     if not settings.tavily_api_key:
         # 文案沿用 Java（模型/用户看到的是同一句提示），实际配置项名称为 TAVILY_API_KEY。
         return "未配置 Tavily API Key（web.search.tavily.api-key），无法联网搜索。"

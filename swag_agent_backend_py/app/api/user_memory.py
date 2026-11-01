@@ -28,6 +28,7 @@ router = APIRouter(prefix="/chat/user-memory", tags=["user-memory"])
 
 class SettingsRequest(BaseModel):
     # Java record 是基本类型 boolean：缺省字段按 false 处理。
+    """记忆开关请求；为兼容旧接口，未传 enabled 时取 False。"""
     enabled: bool = False
 
 
@@ -96,6 +97,7 @@ def _memory_exists(db: Session, user_id: int, memory_id: int) -> bool:
 
 @router.get("")
 def get_user_memory(user=Depends(current_user), db: Session = Depends(get_db)) -> dict:
+    """返回当前用户记忆开关与事实列表，供“我的记忆”面板使用。"""
     module = _memory_module()
     if module is not None:
         return module.get_panel(db, user.id)
@@ -106,6 +108,7 @@ def get_user_memory(user=Depends(current_user), db: Session = Depends(get_db)) -
 def update_settings(
     body: SettingsRequest, user=Depends(current_user), db: Session = Depends(get_db)
 ) -> Response:
+    """保存当前用户的长期记忆开关，关闭时不清空已有事实。"""
     module = _memory_module()
     if module is not None:
         module.set_enabled(db, user.id, bool(body.enabled))
@@ -119,6 +122,7 @@ def delete_user_memory(
     memory_id: int, user=Depends(current_user), db: Session = Depends(get_db)
 ) -> Response:
     # 先判归属，保证「记忆不存在」返回 404（Java 语义），也避免依赖 chat-core 的返回值约定。
+    """先校验事实归属，再删除文本和尽力清理其向量副本。"""
     if not _memory_exists(db, user.id, memory_id):
         raise NotFound("记忆不存在")
 

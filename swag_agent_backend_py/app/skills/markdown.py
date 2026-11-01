@@ -18,6 +18,7 @@ _VALID_NAME = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*")
 
 @dataclass(frozen=True)
 class ParsedSkill:
+    """解析后的技能内容：名称、简介和 Markdown 正文。"""
     name: str
     description: str
     body: str
@@ -25,6 +26,7 @@ class ParsedSkill:
 
 @dataclass(frozen=True)
 class ParseResult:
+    """技能解析结果，显式携带成功标志、内容或错误原因，便于扫描时跳过坏文件。"""
     parsed: ParsedSkill | None
     error: str | None = None
 

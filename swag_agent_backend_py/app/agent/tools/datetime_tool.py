@@ -20,6 +20,7 @@ from app.core.timeutil import TZ
     side_effect="none",
 )
 async def get_current_time(ctx: ToolCtx) -> str:  # noqa: ARG001 - 契约要求签名带 ctx
+    """返回后端按东八区生成的当前时间，供模型回答日期和时间问题。"""
     return datetime.now(TZ).isoformat()
 
 

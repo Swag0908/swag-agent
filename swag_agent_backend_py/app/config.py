@@ -13,6 +13,12 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
+    """集中声明配置项及默认值；同名环境变量优先于 .env，再使用这里的默认值。
+
+    例如 MYSQL_HOST 对应 mysql_host。相对路径以启动时的工作目录为基准。
+    """
+    # .env 在当前工作目录查找，所以应从 swag_agent_backend_py 目录启动。
+    # 以下都是字段默认值；实际值可以由 .env 或环境变量覆盖。
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
@@ -97,6 +103,7 @@ class Settings(BaseSettings):
     # ---- 派生属性 ----
     @property
     def mysql_url(self) -> str:
+        """拼接 MySQL 连接地址；转义用户名和密码，避免特殊字符被误当成 URL 语法。"""
         user = quote_plus(self.mysql_user)
         password = quote_plus(self.mysql_password)
         return (
@@ -106,6 +113,7 @@ class Settings(BaseSettings):
 
     @property
     def pg_url(self) -> str:
+        """拼接向量数据库地址；使用 psycopg 驱动访问 PostgreSQL。"""
         user = quote_plus(self.pg_user)
         password = quote_plus(self.pg_password)
         return f"postgresql+psycopg://{user}:{password}@{self.pg_host}:{self.pg_port}/{self.pg_db}"
@@ -116,6 +124,7 @@ class Settings(BaseSettings):
 
     @property
     def confirmation_required_tools(self) -> set[str]:
+        """将逗号分隔的工具名转成集合；只有列在这里的工具才进入确认票据流程。"""
         return {x.strip() for x in self.audit_confirmation_required_tools.split(",") if x.strip()}
 
     @property
@@ -138,6 +147,7 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
+    """读取并缓存配置，避免每次请求重复解析 .env；进程重启后重新读取。"""
     return Settings()
 
 

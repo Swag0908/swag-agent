@@ -33,6 +33,8 @@ _INSERT_SQL = text(
     "INSERT INTO public.vector_store (id, content, metadata, embedding) "
     "VALUES (:id, :content, CAST(:metadata AS json), CAST(:embedding AS vector))"
 )
+# <=> 是 pgvector 的余弦距离运算符；数值越小，文字在嵌入模型中的含义通常越接近。
+# WHERE 先限定会话键，避免把其他会话的片段混进本次上下文。
 _SEARCH_SQL = text(
     "SELECT content FROM public.vector_store "
     "WHERE metadata->>'conversationId' = :conversation_id "
@@ -86,6 +88,7 @@ async def embed_async(content: str) -> list[float] | None:
 
 
 def _metadata(conversation_key: str, message_type: str) -> str:
+    """给向量附带会话键和消息角色，检索时只取同一记忆键下的片段。"""
     return json.dumps(
         {"conversationId": str(conversation_key), "messageType": message_type.upper()},
         ensure_ascii=False,

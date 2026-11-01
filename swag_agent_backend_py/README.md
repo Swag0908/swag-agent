@@ -31,8 +31,9 @@ cp .env.example .env      # 填入 MySQL / DeepSeek / Tavily 等配置；.env �
 ```
 
 - 健康检查：`GET http://127.0.0.1:8081/actuator/health`
-- Java 后端仍在 `8080`；前端 Vite 代理默认指向 8080。要预览 Python 版，把
-  `swag_agent_web/vite.config.js` 的 target 临时改成 `http://localhost:8081`（不要提交）。
+- Python 开发入口使用 `8081`，Java 原配置使用 `8080`。当前
+  `swag_agent_web/vite.config.js` 的 `/api` 代理指向 `http://localhost:8081`；
+  实际请求落到哪个后端，以当前代理和运行中的服务为准。
 - 数据库：与 Java 共用同一个 MySQL 库；**不建表、不迁移结构**。PG/pgvector 用于向量记忆，
   PG 不可用时聊天与用户记忆会自动降级。
 
@@ -47,6 +48,7 @@ cp .env.example .env      # 填入 MySQL / DeepSeek / Tavily 等配置；.env �
 
 ## 关键文档
 
+- [Python 后端入门：从一次聊天读懂框架、Agent 与记忆](docs/backend-guide.md)（适合不熟悉 Python 时先读，含调用流程图、语法解释与源码阅读顺序）
 - [迁移总方案](../docs/python-migration/00-python-migration-plan.md)
 - [接口契约](../docs/python-migration/01-api-contract.md)
 - [数据模型](../docs/python-migration/02-data-model.md)

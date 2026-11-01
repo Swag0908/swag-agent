@@ -88,6 +88,7 @@ def sse_response(
     state = TurnState()
 
     async def event_stream() -> AsyncIterator[str]:
+        # StreamingResponse 消费这个生成器：每 yield 一帧，就有机会把它发送给浏览器。
         try:
             async for event in stream_turn(
                 messages,
@@ -161,7 +162,7 @@ def plain_response(text: str) -> Response:
 
 
 def finalize_now(turn: runner.TurnContext, answer: str) -> None:
-    """非流式端点用：请求内直接落库（Session 尚在使用中）。"""
+    """非流式端点用：在返回完整回答前调用，内部同样打开独立 Session 落库。"""
     _finalize(turn, answer)
 
 

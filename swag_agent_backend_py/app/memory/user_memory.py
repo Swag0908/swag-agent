@@ -48,6 +48,7 @@ _VEC_DELETE_SQL = text("DELETE FROM public.chat_user_memory_vec WHERE memory_id 
 
 
 def normalize_content(raw: str | None) -> str:
+    """把多余空白合成一个空格，并限制事实文本长度，控制每轮注入模型的内容量。"""
     flat = " ".join((raw or "").split())
     if len(flat) <= MAX_CONTENT_LENGTH:
         return flat
@@ -55,6 +56,7 @@ def normalize_content(raw: str | None) -> str:
 
 
 def list_items(db: Session, user_id: int) -> list[ChatUserMemory]:
+    """按最近更新时间读取当前用户的事实记录，用于“我的记忆”列表。"""
     return list(
         db.execute(
             select(ChatUserMemory)
@@ -75,6 +77,7 @@ def is_enabled(db: Session, user_id: int | None) -> bool:
 
 
 def set_enabled(db: Session, user_id: int, enabled: bool) -> None:
+    """保存用户级记忆开关；关闭不会删除已有事实。"""
     user_id = int(user_id)
     row = db.get(ChatUserMemorySetting, user_id)
     stamp = truncate_to_second(now())
@@ -156,6 +159,8 @@ def recall(db: Session, user_id: int | None, query: str, top_k: int = DEFAULT_TO
         logger.warning("用户 %s 记忆向量召回失败，降级最近记忆：%s", user_id, exc)
     if contents:
         return contents
+    # 用户事实有 MySQL 原文：语义检索没有结果时，仍可用最近几条维持记忆功能。
+    # 会话语义记忆 long.recall_semantic 的失败策略不同，它直接返回空列表。
     return _recent_contents(db, user_id, k)
 
 
@@ -186,6 +191,7 @@ async def remember(db: Session, user_id: int, content: str) -> str:
 
 
 async def _save_vector(memory_id: int, user_id: int, content: str) -> None:
+    """为已保存的事实补写向量副本；Ollama 或 PG 失败只记录日志。"""
     try:
         embedding = await long_memory.embed_async(content)
         if embedding is None:
@@ -211,12 +217,14 @@ async def _save_vector(memory_id: int, user_id: int, content: str) -> None:
 
 
 def rebuild_memory(db: Session, conversation_id: int, user_id: int) -> None:
+    """兼容入口：重建的是会话消息记忆，具体实现位于 memory/rebuild.py。"""
     from app.memory.rebuild import rebuild_conversation_memory  # noqa: PLC0415 - 避免循环导入
 
     rebuild_conversation_memory(db, conversation_id, user_id)
 
 
 def created_at_ms(memory: ChatUserMemory) -> int:
+    """把事实的创建时间转成前端使用的毫秒时间戳。"""
     return epoch_ms(memory.created_at)
 
 

@@ -18,20 +18,24 @@ router = APIRouter(prefix="/chat/conversations", tags=["conversations"])
 
 
 class CreateRequest(BaseModel):
+    """创建会话的请求体；标题可省略，首条提问可补生成标题。"""
     title: str | None = None
 
 
 class FavoriteRequest(BaseModel):
+    """收藏开关和备注；favorite 的缺省由业务层显式校验。"""
     favorite: bool | None = None
     note: str | None = None
 
 
 class FavoriteOrderRequest(BaseModel):
+    """前端拖动收藏后的会话编号顺序。"""
     ids: list[int] | None = None
 
 
 @router.get("")
 def list_conversations(user=Depends(current_user), db: Session = Depends(get_db)) -> list[dict]:
+    """列出当前登录用户的会话；用户编号来自 Depends 注入的可信身份。"""
     return service.list_conversations(db, user.id)
 
 
@@ -41,12 +45,14 @@ def create_conversation(
     user=Depends(current_user),
     db: Session = Depends(get_db),
 ) -> dict:
+    """创建当前用户的会话目录，尚不调用模型。"""
     title = body.title if body is not None else None
     return service.create_conversation(db, user.id, title)
 
 
 @router.delete("")
 def clear_conversations(user=Depends(current_user), db: Session = Depends(get_db)) -> dict:
+    """清空当前用户全部聊天会话，返回删除数量。"""
     return service.clear_all(db, user.id)
 
 
@@ -57,6 +63,7 @@ def reorder_favorites(
     user=Depends(current_user),
     db: Session = Depends(get_db),
 ) -> list[dict]:
+    """提交收藏编号的新顺序，返回排序后的会话列表。"""
     ids = body.ids if body is not None else None
     return service.reorder_favorites(db, user.id, ids)
 
@@ -65,6 +72,7 @@ def reorder_favorites(
 def list_messages(
     conversation_id: int, user=Depends(current_user), db: Session = Depends(get_db)
 ) -> list[dict]:
+    """读取指定会话的消息；业务层先核对会话归属。"""
     return service.list_messages(db, user.id, conversation_id)
 
 
@@ -72,6 +80,7 @@ def list_messages(
 def delete_conversation(
     conversation_id: int, user=Depends(current_user), db: Session = Depends(get_db)
 ) -> Response:
+    """删除自己的一个会话，成功返回 200 空响应。"""
     service.delete_conversation(db, user.id, conversation_id)
     return Response(status_code=200)
 
@@ -83,6 +92,7 @@ def set_favorite(
     user=Depends(current_user),
     db: Session = Depends(get_db),
 ) -> dict:
+    """更新会话的收藏状态和备注，返回更新后的会话字段。"""
     favorite = body.favorite if body is not None else None
     note = body.note if body is not None else None
     return service.set_favorite(db, user.id, conversation_id, favorite, note)
@@ -95,4 +105,5 @@ def delete_message(
     user=Depends(current_user),
     db: Session = Depends(get_db),
 ) -> list[dict]:
+    """删除目标消息及相邻配对消息，返回剩余历史。"""
     return service.delete_message_pair(db, user.id, conversation_id, message_id)

@@ -32,11 +32,13 @@ async def _prepare(
     conversation_id: int | None,
 ):
     """在线程池里做同步准备（会话校验 + 先落 user 消息 + 组装提示词/记忆）。"""
+    # prepare 会同步读库和召回记忆；await 等的是线程执行结果，不是在这里直接跑同步 I/O。
     return await run_in_threadpool(
         chat_service.prepare, db, user.id, model, user_input, conversation_id
     )
 
 
+# @router.get 是装饰器：把下面的函数登记为该 GET 地址的处理者。
 @router.get("/test/chat")
 async def chat_once(
     model: int = Query(1, description=_MODEL_DESC),

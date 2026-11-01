@@ -237,6 +237,7 @@ def request_confirmation(
 
 
 def _verify_actor(row: AuditConfirmation, ctx: AuditContext) -> None:
+    """要求票据租户和操作者均与当前上下文匹配，禁止借用他人的批准。"""
     if not _equals_nullable(row.tenant_id, ctx.tenant_id) or not _equals_nullable(
         row.actor_id, ctx.actor_id
     ):
@@ -462,6 +463,7 @@ def find(confirmation_id: str | None, *, db: Session | None = None) -> Confirmat
 
 
 def is_expired(record: ConfirmationRecord) -> bool:
+    """按当前时间判断票据是否已过有效期，不在这里更新数据库状态。"""
     return record.expires_at is not None and record.expires_at <= now()
 
 

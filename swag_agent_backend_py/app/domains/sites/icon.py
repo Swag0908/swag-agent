@@ -127,6 +127,7 @@ def _request(url: str, max_bytes: int, accept: str) -> tuple[bytes, str] | None:
 
 
 def is_public_http_uri(url: str) -> bool:
+    """检查 http/https 地址，并拒绝 DNS 解析结果中含内网、回环或保留地址的目标。"""
     try:
         parts = urlsplit(url)
     except ValueError:
@@ -162,6 +163,7 @@ def _is_private_address(address: ipaddress.IPv4Address | ipaddress.IPv6Address) 
 
 
 def _owned_bookmark(db: Session, user_id: int, bookmark_id: int) -> WebsiteBookmark:
+    """抓取图标前先验证书签属于当前用户，避免用他人的书签发起请求。"""
     bookmark = repository.find_bookmark(db, bookmark_id)
     if bookmark is None or bookmark.user_id != user_id:
         raise NotFound(f"网站不存在：#{bookmark_id}")

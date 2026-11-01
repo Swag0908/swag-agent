@@ -34,6 +34,10 @@ class ToolCtx:
 
 @dataclass(frozen=True)
 class ToolSpec:
+    """一个工具的登记信息：模型可见的名称、说明、参数结构，以及后端实际执行的函数。
+
+    side_effect 是分类元数据；此处不会据它自动触发用户确认。
+    """
     name: str
     description: str
     parameters: dict[str, Any]
@@ -56,6 +60,7 @@ def tool(
     """注册一个工具。重复注册时后者覆盖（并行开发期宽松，日志留痕）。"""
 
     def decorator(handler: Callable[..., Awaitable[str]]) -> Callable[..., Awaitable[str]]:
+        # 导入带 @tool 的模块时执行登记；这里只保存函数，尚未执行创建/删除等业务。
         if name in REGISTRY:
             logger.warning("tool %s 重复注册，将被覆盖", name)
         REGISTRY[name] = ToolSpec(
@@ -73,6 +78,7 @@ def tool(
 
 
 def get_tool(name: str) -> ToolSpec | None:
+    """按模型使用的工具名称查询登记信息；未注册返回 None。"""
     return REGISTRY.get(name)
 
 
@@ -157,10 +163,12 @@ async def dispatch(name: str, arguments: str | dict[str, Any], ctx: ToolCtx) -> 
     if missing:
         return False, f"工具参数不正确，缺少：{'、'.join(missing)}"
 
+    # 模型只给工具业务参数。ctx 由后端覆盖注入，模型不能靠参数冒充其他用户。
     kwargs = {key: value for key, value in args.items()}
     if _accepts_ctx(spec):
         kwargs["ctx"] = ctx
     try:
+        # **kwargs 将字典展开成函数的命名参数，例如 {"title": "开会"} → title="开会"。
         result = await spec.handler(**kwargs)
     except ConfirmationRequired:
         # 危险工具需要用户确认：由 API 层决定转 409 还是发 error 事件，不能吞掉。

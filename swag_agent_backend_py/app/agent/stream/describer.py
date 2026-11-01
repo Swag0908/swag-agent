@@ -65,11 +65,13 @@ DETAIL_KEYS = ("query", "keyword", "name", "title", "url", "content", "text", "r
 
 @dataclass(frozen=True)
 class Activity:
+    """前端工具状态展示所需的中文动作提示和参数摘要。"""
     display: str
     detail: str | None
 
 
 def describe(tool_name: str, arguments: str | dict[str, Any] | None) -> Activity:
+    """把工具名和参数翻译成“正在创建待办”等短提示，只负责展示，不执行工具。"""
     action = ACTION_WORDS.get(tool_name) or _fallback_action(tool_name)
     detail = _detail(arguments)
     display = f"正在{action}…" if detail is None else f"正在{action}：{detail}"

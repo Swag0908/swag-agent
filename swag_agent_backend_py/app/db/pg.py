@@ -23,6 +23,7 @@ _pg_engine: Engine | None = None
 
 
 def _create_engine() -> Engine:
+    """创建向量库连接池，并在新连接上注册 pgvector 的数据类型适配器。"""
     from pgvector.psycopg import register_vector
 
     engine = create_engine(
@@ -45,6 +46,7 @@ def _create_engine() -> Engine:
 
 
 def get_pg_engine() -> Engine:
+    """第一次需要向量库时才创建连接池；基础服务启动无需立即连接 PG。"""
     global _pg_engine
     if _pg_engine is None:
         _pg_engine = _create_engine()
@@ -53,6 +55,7 @@ def get_pg_engine() -> Engine:
 
 @contextmanager
 def pg_connection() -> Iterator:
+    """临时借出一个 PG 连接，退出 with 时关闭；写操作需调用方显式 commit。"""
     conn = get_pg_engine().connect()
     try:
         yield conn

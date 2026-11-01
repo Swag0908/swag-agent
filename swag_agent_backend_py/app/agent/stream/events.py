@@ -41,6 +41,7 @@ class SseEvent:
         return dict(self.data)
 
     def encode(self) -> str:
+        """把事件编码成 SSE 文本帧；末尾空行表示一条事件结束，正文换行由 JSON 转义。"""
         body = json.dumps(self.payload(), ensure_ascii=False, separators=(",", ":"))
         return f"event: {self.name}\ndata: {body}\n\n"
 
@@ -58,6 +59,7 @@ def content(text: str) -> SseEvent:
 
 
 def reasoning(text: str) -> SseEvent:
+    """生成工具执行后过程文字事件；这里不是模型原始 reasoning_content 字段。"""
     return _event(REASONING, text=text)
 
 
@@ -81,6 +83,7 @@ def tool_call(
 
 
 def segment_boundary(reason: str) -> SseEvent:
+    """通知前端调整正文与过程的分区，避免把工具执行前的铺垫当作最终答案。"""
     return _event(SEGMENT_BOUNDARY, reason=reason)
 
 

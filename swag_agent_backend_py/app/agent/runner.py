@@ -42,6 +42,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class TurnContext:
+    """一次提问的随身资料：用户、模型、会话、历史和工具上下文；不跨会话持有 ORM 对象。"""
     user_id: int
     user_input: str
     model_id: int
@@ -144,6 +145,8 @@ def build_messages(db: Session, turn: TurnContext) -> list[dict[str, Any]]:
         turn.user_input,
         long_term=long_term,
     )
+    # 模型每次收到的是这份消息列表：system 放规则/背景，user/assistant 放历史对话。
+    # “记住上文”来自后端重传相关文本，不是模型自动读取了我们的数据库。
     messages: list[dict[str, Any]] = [{"role": "system", "content": system_prompt}]
     messages.extend(turn.history)
     messages.append({"role": "user", "content": turn.user_input})
@@ -151,6 +154,7 @@ def build_messages(db: Session, turn: TurnContext) -> list[dict[str, Any]]:
 
 
 def ensure_tool_ctx(turn: TurnContext) -> ToolCtx:
+    """补齐工具执行上下文，让工具从可信后端身份中取得用户编号。"""
     if turn.tool_ctx is None:
         turn.tool_ctx = ToolCtx(
             user_id=turn.user_id,
@@ -185,6 +189,7 @@ async def run_turn_events(
 
 def finalize_turn(db: Session, turn: TurnContext, answer: str) -> None:
     """收尾落库：助手最终回答 + touch 会话 + 长期向量副本（全部尽力而为）。"""
+    # 这是 API 收尾时保存的正文；工具参数和过程提示不作为助手正文保存到 chat_message。
     answer = answer or ""
     if turn.conversation_id is not None:
         try:

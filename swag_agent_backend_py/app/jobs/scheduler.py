@@ -21,6 +21,7 @@ _scheduler: AsyncIOScheduler | None = None
 
 
 def _run_todo_rollover() -> None:
+    """借用独立数据库会话，结算所有活跃用户前一天的待办统计。"""
     from app.db.base import SessionLocal
     from app.domains.todo.rollover import rollover_all_users
 
@@ -30,6 +31,7 @@ def _run_todo_rollover() -> None:
 
 
 def _run_notes_trash_cleanup() -> None:
+    """清理所有用户过期笔记回收站；文件删除由笔记服务完成。"""
     from app.db.base import SessionLocal
     from app.domains.notes.trash import purge_expired_trash_all_users
 
@@ -47,6 +49,7 @@ async def _job_notes_trash_cleanup() -> None:
 
 
 def start_scheduler() -> AsyncIOScheduler:
+    """启动进程内定时器：东八区零点结算待办、03:30 清理回收站；重复调用复用实例。"""
     global _scheduler
     if _scheduler is not None:
         return _scheduler
@@ -70,6 +73,7 @@ def start_scheduler() -> AsyncIOScheduler:
 
 
 def stop_scheduler() -> None:
+    """停止并清除定时器实例，供应用关闭流程调用。"""
     global _scheduler
     if _scheduler is not None:
         _scheduler.shutdown(wait=False)

@@ -32,6 +32,7 @@ _ORDER_LAST = 2147483647
 
 
 def list_conversations(db: Session, user_id: int) -> list[ChatConversation]:
+    """查询当前用户会话：收藏优先，再按收藏顺序、更新时间和编号排序。"""
     stmt = (
         select(ChatConversation)
         .where(ChatConversation.user_id == user_id)
@@ -49,6 +50,7 @@ def list_conversations(db: Session, user_id: int) -> list[ChatConversation]:
 
 
 def get_conversation(db: Session, conversation_id: int, user_id: int) -> ChatConversation | None:
+    """按会话编号和用户编号共同查询，避免读到其他人的会话。"""
     return db.scalar(
         select(ChatConversation).where(
             ChatConversation.id == conversation_id,
@@ -58,6 +60,7 @@ def get_conversation(db: Session, conversation_id: int, user_id: int) -> ChatCon
 
 
 def create_conversation(db: Session, user_id: int, title: str, now: datetime) -> ChatConversation:
+    """插入会话并提交，刷新后返回包含数据库生成编号的对象。"""
     conversation = ChatConversation(
         user_id=user_id,
         title=title or "",
@@ -75,6 +78,7 @@ def create_conversation(db: Session, user_id: int, title: str, now: datetime) ->
 
 
 def list_messages(db: Session, conversation_id: int) -> list[ChatMessage]:
+    """按编号顺序读取会话消息；调用方必须先检查会话归属。"""
     return list(
         db.scalars(
             select(ChatMessage).where(ChatMessage.conversation_id == conversation_id).order_by(ChatMessage.id)
@@ -83,6 +87,7 @@ def list_messages(db: Session, conversation_id: int) -> list[ChatMessage]:
 
 
 def delete_conversation(db: Session, conversation_id: int, user_id: int) -> bool:
+    """验证归属后删除消息与会话并提交；不存在或越权返回 False。"""
     conversation = get_conversation(db, conversation_id, user_id)
     if conversation is None:
         return False
@@ -98,6 +103,7 @@ def delete_conversation(db: Session, conversation_id: int, user_id: int) -> bool
 
 
 def delete_all_conversations(db: Session, user_id: int) -> list[int]:
+    """删除该用户全部会话与消息，返回被删除的会话编号用于清理副本。"""
     ids = list(
         db.scalars(
             select(ChatConversation.id).where(ChatConversation.user_id == user_id).order_by(ChatConversation.id)
@@ -130,6 +136,7 @@ def set_favorite(
     favorite_order: int | None,
     now: datetime,
 ) -> bool:
+    """写入收藏状态并提交；重复收藏保留首次收藏时间。"""
     conversation = get_conversation(db, conversation_id, user_id)
     if conversation is None:
         return False
@@ -149,6 +156,7 @@ def set_favorite(
 
 
 def reorder_favorites(db: Session, user_id: int, ordered_ids: list[int] | None) -> None:
+    """仅更新属于当前用户且已收藏的会话，不接受借排序修改他人记录。"""
     if not ordered_ids:
         return
     for index, conversation_id in enumerate(ordered_ids):
@@ -165,6 +173,7 @@ def reorder_favorites(db: Session, user_id: int, ordered_ids: list[int] | None) 
 
 
 def delete_messages(db: Session, conversation_id: int, user_id: int, message_ids: list[int]) -> int:
+    """同时限定会话、用户和消息编号执行删除并提交，返回删除数量。"""
     if not message_ids:
         return 0
     result = db.execute(

@@ -48,6 +48,7 @@ def load_history(
         .order_by(ChatMessage.id.desc())
         .limit(limit)
     ).all()
+    # SQL 倒序取最近 40 条，再反转回时间正序，保证模型按“先问后答”的顺序阅读。
     history = [
         {"role": role, "content": content}
         for role, content in reversed(rows)
@@ -146,6 +147,7 @@ def clear_memory_window(db: Session, conversation_id: int) -> None:
 
 
 def history_length(db: Session, conversation_id: int) -> int:
+    """统计会话表中的全部消息行数；此处不按角色或空内容过滤。"""
     rows = db.execute(
         select(ChatMessage.id).where(ChatMessage.conversation_id == int(conversation_id))
     ).all()

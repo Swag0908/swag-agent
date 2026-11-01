@@ -19,12 +19,14 @@ logger = logging.getLogger(__name__)
 
 
 def bootstrap() -> None:
+    """补齐注册设置和配置指定的管理员；业务表必须事先存在，重复启动不会重复创建用户。"""
     with SessionLocal() as db:
         _ensure_register_settings(db)
         _seed_admins(db)
 
 
 def _ensure_register_settings(db) -> None:  # noqa: ANN001
+    """注册开关使用 id=1 的单行配置；仅在配置缺失时初始化。"""
     row = db.get(AppRegisterSetting, 1)
     if row is not None:
         return
@@ -36,6 +38,7 @@ def _ensure_register_settings(db) -> None:  # noqa: ANN001
 
 
 def _seed_admins(db) -> None:  # noqa: ANN001
+    """配置了初始密码才补建管理员；已有同名账户会被提升为管理员。"""
     if not settings.auth_admin_password:
         return
     for username in settings.admin_usernames:

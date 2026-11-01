@@ -49,6 +49,7 @@ def _remember_sync(user_id: int, content: str) -> tuple[str, str, int]:
 
 
 def _write_vector_sync(memory_id: int, user_id: int, content: str) -> None:
+    """在工作线程中生成向量并更新 PG 副本；失败不撤销已成功保存的 MySQL 事实。"""
     from sqlalchemy import text  # noqa: PLC0415
 
     from app.db.pg import pg_connection  # noqa: PLC0415
@@ -100,6 +101,7 @@ def _write_vector_sync(memory_id: int, user_id: int, content: str) -> None:
     side_effect="write",
 )
 async def remember_user_memory(content: str, ctx: ToolCtx) -> str:
+    """模型可调用的“记住这件事”入口；先存事实文本，再尽力补向量，返回保存结果。"""
     if ctx.user_id is None:
         return "未登录，无法保存记忆"
     user_id = int(ctx.user_id)

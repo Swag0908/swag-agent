@@ -2,12 +2,12 @@
 
 语义与 Java `ChatStreamBridge`（`J/chat/stream/ChatStreamBridge.java`）1:1：
 
-1. `ready` 永远第一条、`done` 正常结束时最后一条；异常时用**单个 `error` 事件替换整条流**，
-   不再发 `done`（`ChatStreamBridge.java:75-82`）。
+1. `ready` 永远第一条、`done` 正常结束时最后一条；异常时追加一个 `error` 事件并终止，
+   不再发 `done`；已发给前端的事件无法撤回。
 2. 正文/过程分界线 = 本轮流**是否已经出现过工具事件**：
    工具事件之前出现的文字 → `content`（当时无法预知）；之后 → `reasoning`（只展示不落库）。
 3. 收尾 `finalize`（逐行等价 `onComplete`，`:127-154`）：本轮流跑过工具时，
-   - 工具后的最后一段文字就是最终回答 → 先（若工具前发过正文）补 `segment_boundary{"final_answer"}`，
+   - 将工具事件后累积的过程文字转成最终回答 → 先（若工具前发过正文）补 `segment_boundary{"final_answer"}`，
      再发一条**完整** `content`（不是删 `reasoning`，前端收到 content 会收起思考块）；
    - 模型只调工具、之后没再说话 → 正文留空，只发 `segment_boundary{"tool_only"}`。
 4. 工具事件必须成对：执行前 `RUNNING`，执行后 `SUCCEEDED`/`FAILED`，带同一个 `call_id` 与 `duration_ms`。
@@ -66,6 +66,7 @@ class TurnState:
 
 @dataclass
 class _PendingToolCall:
+    """暂存模型分片传来的工具名和 JSON 参数；同一个 index 的片段要拼完整再执行。"""
     index: int
     name: str = ""
     call_id: str | None = None
@@ -123,6 +124,8 @@ async def stream_turn(
     _record_event("AGENT_STARTED", "STARTED", agentName="chatClient", modelName=model)
 
     try:
+        # 一次用户提问可能请求模型多次：模型提出工具调用 → 后端执行 → 携结果再次问模型。
+        # rounds 限制的是模型请求轮数，不是单个工具的数量；达到上限后按已有状态收尾。
         for _ in range(max(1, rounds)):
             pending: dict[int, _PendingToolCall] = {}
             reasoning_parts: list[str] = []
@@ -147,6 +150,8 @@ async def stream_turn(
                             st.answer.append(text)
                             st.has_content_before_tool = True
                             yield events.content(text)
+                    # 模型的工具参数也是分片到达的，例如 '{"ti' + 'tle":"开会"}'。
+                    # 必须按 index 收齐，不能收到半个 JSON 就调用业务函数。
                     for raw_call in _get(delta, "tool_calls") or []:
                         index = int(_get(raw_call, "index", 0) or 0)
                         slot = pending.setdefault(index, _PendingToolCall(index=index))
@@ -168,6 +173,7 @@ async def stream_turn(
             messages.append(
                 _assistant_message(round_text, pending, reasoning_parts)
             )
+            # 按模型给出的 index 顺序逐个执行；本实现没有并行执行这些工具。
             for index in sorted(pending):
                 call = pending[index]
                 name = call.name or "unknown"
@@ -197,6 +203,8 @@ async def stream_turn(
                         "ok": ok,
                     }
                 )
+                # 把真实工具结果作为 role=tool 写回本轮消息，下一次请求模型时它才能看到结果。
+                # tool_call_id 将结果与模型提出的那个调用对应起来。
                 messages.append(
                     {
                         "role": "tool",
@@ -227,7 +235,7 @@ async def stream_turn(
 
 
 def finalize(state: TurnState) -> list[events.SseEvent]:
-    """收尾：逐行等价 Java `ChatStreamBridge.onComplete`（`:127-154`）。"""
+    """把工具后的累计文字转成正文；工具前铺垫不作为最终回答保存。"""
     if not state.has_tool_events:
         return []  # 没干过活：正文早已按 content 发完
     final_answer = "".join(state.reasoning)
@@ -251,6 +259,7 @@ def _assistant_message(
     pending: dict[int, _PendingToolCall],
     reasoning_parts: list[str],
 ) -> dict[str, Any]:
+    """将模型提出的工具调用放回消息列表，供下一轮与 tool 结果配对；必要时带回 reasoning_content。"""
     message: dict[str, Any] = {
         "role": "assistant",
         "content": "".join(round_text) or None,
@@ -272,6 +281,7 @@ def _assistant_message(
 
 async def _execute_tool(name: str, arguments: str, ctx: ToolCtx, call_id: str | None) -> tuple[bool, str]:
     """执行工具；审计旁路尽力调用（模块缺失/异常都不影响聊天）。"""
+    # SSE 的 RUNNING/SUCCEEDED 状态由上方生成；它们不等于已经写入同名数据库审计事件。
     _record_tool_requested(name, arguments, ctx, call_id)
     await _check_confirmation(name, arguments, ctx, call_id)
     return await dispatch(name, arguments, ctx)
@@ -316,6 +326,10 @@ def _record_tool_requested(name: str, arguments: str, ctx: ToolCtx, call_id: str
 
 
 async def _check_confirmation(name: str, arguments: str, ctx: ToolCtx, call_id: str | None) -> None:
+    """若 recorder 暴露确认检查器则调用；当前 recorder 未提供该入口，不能据此认定确认已接入。
+
+    本函数只向上转抛 ConfirmationRequired，其余检查异常按现有逻辑仅记调试日志。
+    """
     recorder = _audit_recorder()
     if recorder is None:
         return

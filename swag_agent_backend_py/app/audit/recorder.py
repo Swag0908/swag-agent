@@ -367,6 +367,7 @@ def record_agent_started(
     prompt: str | None = None,
     audit_id: str | None = None,
 ) -> None:
+    """记录 Agent 开始事件，可附带模型信息和输入摘要。"""
     record_event(
         AuditEventType.AGENT_STARTED,
         "STARTED",
@@ -386,6 +387,7 @@ def record_agent_completed(
     output: str | None = None,
     audit_id: str | None = None,
 ) -> None:
+    """记录 Agent 完成事件，可附带输出摘要。"""
     record_event(
         AuditEventType.AGENT_COMPLETED,
         "SUCCEEDED",
@@ -404,6 +406,7 @@ def record_agent_failed(
     error: BaseException | str | None = None,
     audit_id: str | None = None,
 ) -> None:
+    """记录 Agent 失败事件，整理错误信息供排查。"""
     if isinstance(error, BaseException):
         error_code, error_message = type(error).__name__, str(error)
     else:
@@ -428,6 +431,7 @@ def record_agent_waiting_confirmation(
     model_name: str | None = None,
     audit_id: str | None = None,
 ) -> None:
+    """记录 Agent 等待用户确认的状态及关联票据。"""
     record_event(
         AuditEventType.AGENT_WAITING_CONFIRMATION,
         "WAITING_CONFIRMATION",

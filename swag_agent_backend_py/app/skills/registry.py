@@ -83,20 +83,24 @@ class SkillRegistry:
         return self._builtin_root
 
     def list(self, db: Session | None = None) -> list[SkillManifest]:
+        """必要时重扫磁盘，按名字返回所有有效技能，不过滤禁用项。"""
         with self._lock:
             self._refresh_if_changed(db)
             return sorted(self._manifests.values(), key=lambda manifest: manifest.name)
 
     def enabled(self, db: Session) -> list[SkillManifest]:
+        """从有效技能中排除数据库标记禁用的项，供系统提示词注入。"""
         disabled = self.disabled_names(db)
         return [manifest for manifest in self.list(db) if manifest.name not in disabled]
 
     def find(self, name: str) -> SkillManifest | None:
+        """按技能名查询有效清单；外部根目录变化时先刷新。"""
         with self._lock:
             self._refresh_if_changed()
             return self._manifests.get(name)
 
     def is_enabled(self, db: Session, name: str) -> bool:
+        """技能必须存在且未被禁用才返回 True。"""
         with self._lock:
             self._refresh_if_changed(db)
             if name not in self._manifests:
@@ -109,6 +113,7 @@ class SkillRegistry:
         return {str(name) for name in names}
 
     def set_enabled(self, db: Session, name: str, enabled: bool) -> bool:
+        """技能存在时保存启停状态；这是全局技能配置，不是每个用户独立设置。"""
         with self._lock:
             self._refresh_if_changed(db)
             if name not in self._manifests:
@@ -117,6 +122,7 @@ class SkillRegistry:
             return True
 
     def delete_external(self, db: Session, name: str) -> bool:
+        """只删除外部技能目录及启停记录，内置技能不允许在此删除。"""
         with self._lock:
             self._refresh_if_changed(db)
             manifest = self._manifests.get(name)
@@ -133,6 +139,7 @@ class SkillRegistry:
             return True
 
     def refresh(self, db: Session | None = None) -> None:
+        """重新扫描内置与外部技能，同名时外部覆盖；更新缓存并清理消失技能的状态。"""
         with self._lock:
             found: dict[str, SkillManifest] = {}
             builtin = self._scan(self._builtin_root, external=False)
@@ -167,6 +174,7 @@ class SkillRegistry:
         return None
 
     def _scan(self, root: Path, *, external: bool) -> list[SkillManifest]:
+        """读取根目录下各技能的 SKILL.md；无效或无法读取的文件跳过并记录日志。"""
         if not root.is_dir():
             return []
         manifests: list[SkillManifest] = []
@@ -226,6 +234,7 @@ _instance_lock = threading.Lock()
 
 
 def get_registry() -> SkillRegistry:
+    """进程内复用一份注册表；使用锁避免并发首次访问时重复创建。"""
     global _instance
     if _instance is None:
         with _instance_lock:

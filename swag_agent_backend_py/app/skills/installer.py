@@ -90,6 +90,7 @@ def normalize_repo_url(repo_url: str | None) -> str:
 
 
 def _git_clone(url: str, target: Path) -> None:
+    """在临时目录浅克隆仓库，禁用交互式口令提示并设置超时；失败转为业务异常。"""
     env = dict(os.environ)
     env["GIT_TERMINAL_PROMPT"] = "0"
     timeout = max(1, settings.skills_install_timeout_seconds)

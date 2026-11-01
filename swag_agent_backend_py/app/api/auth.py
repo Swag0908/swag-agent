@@ -16,6 +16,7 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 class RegisterRequest(BaseModel):
+    """注册请求的 JSON 字段；允许缺省值以便业务层返回与旧版一致的提示。"""
     username: str | None = None
     password: str | None = None
     displayName: str | None = None
@@ -23,11 +24,13 @@ class RegisterRequest(BaseModel):
 
 
 class LoginRequest(BaseModel):
+    """登录请求结构；Pydantic 负责解析 JSON，密码是否正确由认证服务检查。"""
     username: str | None = None
     password: str | None = None
 
 
 def _issue_cookie(response: Response, token: str) -> None:
+    """附加仅供 Zipkin 路径使用的 HttpOnly Cookie；普通 API 仍使用 Bearer 令牌。"""
     if not token:
         return
     response.set_cookie(
@@ -46,6 +49,7 @@ def _clear_cookie(response: Response) -> None:
 
 
 def _auth_body(token: str | None, user: service.UserRecord) -> dict:
+    """挑选允许返回前端的账户字段，避免泄露内部密码哈希。"""
     return {
         "token": token,
         "userId": user.id,
@@ -57,6 +61,7 @@ def _auth_body(token: str | None, user: service.UserRecord) -> dict:
 
 @router.post("/register")
 def register(body: RegisterRequest, response: Response, db: Session = Depends(get_db)) -> dict:
+    """检查注册码、创建普通用户并自动登录，返回令牌和账户信息。"""
     service.assert_can_register(db, body.registerCode)
     user = service.create_user(db, body.username or "", body.password or "", body.displayName, service.ROLE_USER)
     token, _ = service.login(db, body.username or "", body.password or "")
@@ -66,6 +71,7 @@ def register(body: RegisterRequest, response: Response, db: Session = Depends(ge
 
 @router.post("/login")
 def login(body: LoginRequest, response: Response, db: Session = Depends(get_db)) -> dict:
+    """验证账号密码并返回登录令牌，同时设置 Zipkin 访问 Cookie。"""
     token, user = service.login(db, body.username or "", body.password or "")
     _issue_cookie(response, token)
     return _auth_body(token, user)
@@ -73,6 +79,7 @@ def login(body: LoginRequest, response: Response, db: Session = Depends(get_db))
 
 @router.post("/logout")
 def logout(request: Request, response: Response, db: Session = Depends(get_db)) -> Response:
+    """注销当前 Bearer 令牌并构造空响应；Cookie 清理由注入的 response 对象承接。"""
     token = getattr(request.state, "auth_token", None)
     service.logout(db, token)
     _clear_cookie(response)
@@ -81,6 +88,7 @@ def logout(request: Request, response: Response, db: Session = Depends(get_db)) 
 
 @router.get("/me")
 def me(request: Request, response: Response, db: Session = Depends(get_db), user=Depends(current_user)) -> dict:
+    """按可信身份查询账户信息并续发 Zipkin Cookie；此接口不签发新的 API 令牌。"""
     record = service.find_by_id(db, user.id)
     if record is None:
         raise AppError(401, "请先登录")

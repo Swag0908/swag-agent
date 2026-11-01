@@ -38,6 +38,11 @@ ROUTER_MODULES = [
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
+    """应用的开机与关机流程：按配置启动定时任务、补齐初始数据，退出时停止任务。
+
+    yield 前在启动时执行，yield 后在关闭时执行；初始化失败只记日志，服务仍可启动。
+    """
+    # lifespan 是服务进程的生命周期，不是每次聊天都执行一遍。
     scheduler = None
     if settings.scheduler_enabled:
         try:
@@ -52,10 +57,11 @@ async def lifespan(_app: FastAPI):
         from app.bootstrap import bootstrap
 
         try:
+            # 当前数据库驱动是同步的：交给工作线程，异步主循环可以继续调度其他任务。
             await run_in_threadpool(bootstrap)
         except Exception:  # noqa: BLE001
             logger.warning("bootstrap failed (DB unavailable?); app will still start", exc_info=True)
-    yield
+    yield  # 到这里应用开始接收请求；关闭服务时从这一行后面继续。
     if scheduler is not None:
         from app.jobs.scheduler import stop_scheduler
 
@@ -63,6 +69,10 @@ async def lifespan(_app: FastAPI):
 
 
 def create_app() -> FastAPI:
+    """组装 HTTP 服务：安装错误处理器和中间件，再挂载各业务路由。
+
+    返回 FastAPI 实例；模块末尾的 app 会被 Uvicorn 作为请求入口加载。
+    """
     logging.basicConfig(level=settings.log_level.upper(), format="%(asctime)s %(levelname)s %(name)s %(message)s")
     app = FastAPI(
         title="swag_agent",
@@ -84,6 +94,7 @@ def create_app() -> FastAPI:
         logger.info("audit middleware not available yet")
     app.add_middleware(AuthMiddleware)
 
+    # 每个 api 模块把自己的地址登记在 router 中；include_router 汇总这些地址。
     for module_name in ROUTER_MODULES:
         try:
             module = importlib.import_module(module_name)
@@ -99,4 +110,5 @@ def create_app() -> FastAPI:
     return app
 
 
+# Uvicorn 的 "app.main:app"：冒号前是模块位置，冒号后是这里的应用对象。
 app = create_app()

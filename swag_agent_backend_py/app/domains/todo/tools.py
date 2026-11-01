@@ -44,6 +44,7 @@ def _session():  # noqa: ANN202 - 便于测试 monkeypatch
 
 
 def _run(fn, *args):  # noqa: ANN001
+    """在工作线程内新建数据库会话并执行同步业务，返回可 await 的任务。"""
     def call():
         with _session() as db:
             return fn(db, *args)
@@ -129,6 +130,7 @@ def _list_by_date(db, user_id: int, raw_date) -> str:  # noqa: ANN001
 
 @tool(name="listTodayTodos", description=LIST_TODAY_DESC, parameters=EMPTY_PARAMS, side_effect="read")
 async def list_today_todos(ctx: ToolCtx) -> str:
+    """把当前用户今日待办整理成带 #id 的文字，供模型继续引用。"""
     user_id = _user_id(ctx)
     if user_id is None:
         return "未登录，无法操作待办"
@@ -154,6 +156,7 @@ async def list_today_todos(ctx: ToolCtx) -> str:
     side_effect="write",
 )
 async def create_todo(title: str, note: str, dueDate: str, dueTime: str, ctx: ToolCtx) -> str:
+    """把模型提供的日期/时间文本交给同步业务层，创建待办并返回结果文案。"""
     user_id = _user_id(ctx)
     if user_id is None:
         return "未登录，无法操作待办"
@@ -182,6 +185,7 @@ async def create_todo(title: str, note: str, dueDate: str, dueTime: str, ctx: To
 async def update_todo(
     idOrTitle: str, title: str, note: str, dueDate: str, dueTime: str, ctx: ToolCtx
 ) -> str:
+    """按编号或标题修改当前用户待办；业务校验失败以文字返回模型。"""
     user_id = _user_id(ctx)
     if user_id is None:
         return "未登录，无法操作待办"
@@ -202,6 +206,7 @@ async def update_todo(
     side_effect="write",
 )
 async def complete_todo(idOrTitle: str, ctx: ToolCtx) -> str:
+    """将当前用户指定待办标为已完成，返回可供模型转述的结果。"""
     user_id = _user_id(ctx)
     if user_id is None:
         return "未登录，无法操作待办"
@@ -225,6 +230,7 @@ async def complete_todo(idOrTitle: str, ctx: ToolCtx) -> str:
     side_effect="write",
 )
 async def defer_todo(idOrTitle: str, newDate: str, ctx: ToolCtx) -> str:
+    """解析目标日期并延期待办，未给日期时默认明天。"""
     user_id = _user_id(ctx)
     if user_id is None:
         return "未登录，无法操作待办"
@@ -245,6 +251,7 @@ async def defer_todo(idOrTitle: str, newDate: str, ctx: ToolCtx) -> str:
     side_effect="delete",
 )
 async def delete_todo(idOrTitle: str, ctx: ToolCtx) -> str:
+    """删除当前用户指定的待办；side_effect 标签本身不提供确认拦截。"""
     user_id = _user_id(ctx)
     if user_id is None:
         return "未登录，无法操作待办"
@@ -265,6 +272,7 @@ async def delete_todo(idOrTitle: str, ctx: ToolCtx) -> str:
     side_effect="read",
 )
 async def list_todos_by_date(date: str, ctx: ToolCtx) -> str:
+    """解析日期并读取当天待办，转换成模型可阅读的文字列表。"""
     user_id = _user_id(ctx)
     if user_id is None:
         return "未登录，无法操作待办"

@@ -20,11 +20,13 @@ _MEDIA_TYPE = re.compile(r"^[-\w.]+/[-\w.+]+$")
 
 
 class FolderRequest(BaseModel):
+    """分类名称和父分类编号；parentId 为空表示顶层。"""
     name: str | None = None
     parentId: int | None = None
 
 
 class BookmarkRequest(BaseModel):
+    """书签编辑字段；沿用前端 camelCase 键名，无需前端另做转换。"""
     name: str | None = None
     url: str | None = None
     description: str | None = None
@@ -40,6 +42,7 @@ def list_library(
     user: AuthUser = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> dict:
+    """读取分类树及书签；可按直属分类、关键字或未分类筛选。"""
     return views.library_to_dict(service.library(db, user.id, folderId, q, unclassified))
 
 
@@ -49,6 +52,7 @@ def create_folder(
     user: AuthUser = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> dict:
+    """为当前用户新建网站分类，转换为前端所需字段返回。"""
     node = service.create_folder(db, user.id, body.name, body.parentId)
     return views.folder_to_dict(node)
 
@@ -60,6 +64,7 @@ def update_folder(
     user: AuthUser = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> dict:
+    """重命名或移动网站分类，目录成环检查由业务层负责。"""
     node = service.update_folder(db, user.id, folder_id, body.name, body.parentId)
     return views.folder_to_dict(node)
 
@@ -71,6 +76,7 @@ def delete_folder(
     user: AuthUser = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> Response:
+    """删除分类；cascade=false 时非空分类返回冲突，避免直接连内容删除。"""
     service.delete_folder(db, user.id, folder_id, cascade)
     return Response(status_code=200)
 
@@ -81,6 +87,7 @@ def create_bookmark(
     user: AuthUser = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> dict:
+    """将表单数据交给网站服务，创建书签后返回展示字段。"""
     view = service.create_bookmark(
         db, user.id, body.name, body.url, body.description, body.iconUrl, body.folderId
     )
@@ -94,6 +101,7 @@ def update_bookmark(
     user: AuthUser = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> dict:
+    """将编辑字段交给业务层，修改当前用户的书签。"""
     view = service.update_bookmark(
         db,
         user.id,
@@ -113,6 +121,7 @@ def bookmark_icon(
     user: AuthUser = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> Response:
+    """返回用户书签的图标二进制；首次无缓存时尝试抓取，找不到返回 404。"""
     found = icon_service.icon_for(db, user.id, bookmark_id)
     if found is None:
         return Response(status_code=404)
@@ -131,5 +140,6 @@ def delete_bookmark(
     user: AuthUser = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> Response:
+    """删除当前用户书签，成功返回 200 空响应。"""
     service.delete_bookmark(db, user.id, bookmark_id)
     return Response(status_code=200)

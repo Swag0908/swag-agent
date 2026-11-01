@@ -25,10 +25,12 @@ router = APIRouter(
 
 
 class ToggleRequest(BaseModel):
+    """技能启停请求；enabled 缺失时返回明确的业务错误。"""
     enabled: bool | None = None
 
 
 class InstallRequest(BaseModel):
+    """技能仓库地址及仓库内路径，供安装器定位 SKILL.md。"""
     repoUrl: str | None = None
     skillPath: str | None = None
 
@@ -53,6 +55,7 @@ def _views(db: Session) -> list[dict]:
 
 @router.get("")
 def list_skills(db: Session = Depends(get_db)) -> list[dict]:
+    """管理员查看有效技能及全局启停状态。"""
     return _views(db)
 
 
@@ -62,6 +65,7 @@ def toggle_skill(
     body: ToggleRequest | None = None,
     db: Session = Depends(get_db),
 ) -> dict:
+    """启停已有技能；后续组装系统提示词时采用新状态。"""
     if body is None or body.enabled is None:
         raise BadRequest("缺少 enabled 字段")
     registry = get_registry()
@@ -75,12 +79,14 @@ def toggle_skill(
 
 @router.post("/refresh")
 def refresh_skills(db: Session = Depends(get_db)) -> list[dict]:
+    """强制重扫技能目录，用于正文变更或安装后的刷新。"""
     get_registry().refresh(db)
     return _views(db)
 
 
 @router.post("/install")
 def install_skill(body: InstallRequest | None = None, db: Session = Depends(get_db)) -> dict:
+    """从仓库安装或覆盖外部技能，返回安装名称和最新技能列表。"""
     if body is None:
         raise BadRequest("请求体不能为空")
     installed = installer.install(body.repoUrl, body.skillPath, db=db)
@@ -89,6 +95,7 @@ def install_skill(body: InstallRequest | None = None, db: Session = Depends(get_
 
 @router.delete("/{name}")
 def delete_skill(name: str, db: Session = Depends(get_db)) -> Response:
+    """删除外部技能目录；内置技能只能禁用，不能在此删除。"""
     if not get_registry().delete_external(db, name):
         raise BadRequest(f"技能不存在或为内置技能，无法删除：{name}")
     return Response(status_code=200)

@@ -26,6 +26,7 @@ _MEMORY_ROLES = ("user", "assistant")
 
 
 def _conversation_messages(db: Session, conversation_id: int) -> list[dict[str, str]]:
+    """按消息编号读取会话中剩余的非空提问和回答，作为记忆重建的输入。"""
     rows = db.execute(
         select(ChatMessage.role, ChatMessage.content)
         .where(

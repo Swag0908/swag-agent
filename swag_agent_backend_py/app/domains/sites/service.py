@@ -25,6 +25,7 @@ def library(
     query: str | None,
     unclassified_only: bool,
 ) -> views.Library:
+    """构建用户的分类树及筛选后的书签；树节点计入整个子树，列表筛选只匹配直属分类。"""
     folders = repository.list_folders(db, user_id)
     all_bookmarks = repository.list_bookmarks(db, user_id, None, None, False)
     descendants = _build_descendants(folders)
@@ -48,6 +49,7 @@ def library(
 def create_folder(
     db: Session, user_id: int, name: str | None, parent_id: int | None
 ) -> views.FolderNode:
+    """验证父分类属于当前用户，再把新分类放在同级末尾。"""
     clean_name = _require_name(name, "文件夹名称不能为空")
     _ensure_parent(db, user_id, parent_id)
     now = timeutil.now()
@@ -67,6 +69,7 @@ def create_folder(
 def update_folder(
     db: Session, user_id: int, folder_id: int, name: str | None, parent_id: int | None
 ) -> views.FolderNode:
+    """修改分类名或父分类；禁止移到自身或自己的后代下面，以免形成循环。"""
     folder = _resolve_folder(db, user_id, folder_id)
     clean_name = _require_name(name, "文件夹名称不能为空")
     _ensure_parent(db, user_id, parent_id)
@@ -81,6 +84,7 @@ def update_folder(
 
 
 def delete_folder(db: Session, user_id: int, folder_id: int, cascade: bool) -> None:
+    """删除分类子树；非空且未指定 cascade 时返回 409，指定后连书签一起删除。"""
     _resolve_folder(db, user_id, folder_id)
     folders = repository.list_folders(db, user_id)
     descendants = _build_descendants(folders)
@@ -110,6 +114,7 @@ def create_bookmark(
     icon_url: str | None,
     folder_id: int | None,
 ) -> views.BookmarkView:
+    """验证名称、网址和分类归属，创建当前用户的网站书签。"""
     clean_name = _require_name(name, "网站名称不能为空")
     clean_url = normalize_url(url)
     _ensure_folder(db, user_id, folder_id)
@@ -140,6 +145,7 @@ def update_bookmark(
     icon_url: str | None,
     folder_id: int | None,
 ) -> views.BookmarkView:
+    """修改自己的书签；网址或图标地址变化时清除图标缓存，供下次重新抓取。"""
     bookmark = _resolve_bookmark(db, user_id, bookmark_id)
     clean_name = _require_name(name, "网站名称不能为空")
     clean_url = normalize_url(url)
@@ -161,6 +167,7 @@ def update_bookmark(
 
 
 def delete_bookmark(db: Session, user_id: int, bookmark_id: int) -> None:
+    """核对归属后删除网站书签并提交。"""
     bookmark = _resolve_bookmark(db, user_id, bookmark_id)
     repository.delete_bookmark(db, bookmark)
     db.commit()
@@ -200,6 +207,7 @@ def normalize_url(raw: str | None) -> str:
 def _build_tree(
     folders: list[WebsiteFolder], counts: dict[int, int], parent_id: int | None
 ) -> list[views.FolderNode]:
+    """把通过 parent_id 关联的平面分类列表递归组装成前端树结构。"""
     result: list[views.FolderNode] = []
     for folder in folders:
         if folder.parent_id == parent_id:
@@ -217,6 +225,7 @@ def _build_tree(
 
 
 def _build_descendants(folders: list[WebsiteFolder]) -> dict[int, list[int]]:
+    """建立“父分类 → 直接子分类编号”的索引，便于遍历子树。"""
     result: dict[int, list[int]] = {}
     for folder in folders:
         result.setdefault(folder.id, [])
@@ -226,6 +235,7 @@ def _build_descendants(folders: list[WebsiteFolder]) -> dict[int, list[int]]:
 
 
 def _collect_folder_ids(folder_id: int, descendants: dict[int, list[int]], result: set[int]) -> None:
+    """将分类及全部后代编号收集到集合，用于级联删除和子树计数。"""
     result.add(folder_id)
     for child in descendants.get(folder_id, []):
         if child not in result:
@@ -233,6 +243,7 @@ def _collect_folder_ids(folder_id: int, descendants: dict[int, list[int]], resul
 
 
 def _ensure_not_descendant(db: Session, user_id: int, folder_id: int, parent_id: int) -> None:
+    """拒绝把分类移动到自身子树下，防止目录关系成环。"""
     folders = repository.list_folders(db, user_id)
     descendants = _build_descendants(folders)
     ids: set[int] = set()
@@ -254,6 +265,7 @@ def _ensure_folder(db: Session, user_id: int, folder_id: int | None) -> None:
 
 
 def _resolve_folder(db: Session, user_id: int, folder_id: int) -> WebsiteFolder:
+    """按编号找分类并核对用户归属，失败统一表现为不存在。"""
     folder = repository.find_folder(db, folder_id)
     if folder is None or folder.user_id != user_id:
         raise NotFound(f"文件夹不存在：#{folder_id}")
@@ -261,6 +273,7 @@ def _resolve_folder(db: Session, user_id: int, folder_id: int) -> WebsiteFolder:
 
 
 def _resolve_bookmark(db: Session, user_id: int, bookmark_id: int) -> WebsiteBookmark:
+    """按编号找书签并核对用户归属，失败统一表现为不存在。"""
     bookmark = repository.find_bookmark(db, bookmark_id)
     if bookmark is None or bookmark.user_id != user_id:
         raise NotFound(f"网站不存在：#{bookmark_id}")

@@ -12,6 +12,7 @@ router = APIRouter(tags=["health"])
 
 @router.get("/actuator/health")
 def health() -> dict:
+    """执行 MySQL SELECT 1，失败时 body 标记 DOWN；此函数仍返回普通 200 响应。"""
     status = "UP"
     try:
         with engine.connect() as conn:
@@ -23,4 +24,5 @@ def health() -> dict:
 
 @router.get("/actuator/info")
 def info() -> dict:
+    """返回应用名称和运行时标识，便于确认请求是否到达 Python 服务。"""
     return {"app": "swag_agent", "runtime": "python"}

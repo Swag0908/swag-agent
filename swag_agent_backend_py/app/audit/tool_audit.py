@@ -283,6 +283,7 @@ async def record_agent_started(
     prompt: str | None = None,
     audit_id: str | None = None,
 ) -> None:
+    """在线程池调用同步审计器记录开始，写入失败仅记日志。"""
     try:
         await run_in_threadpool(
             partial(
@@ -304,6 +305,7 @@ async def record_agent_completed(
     output: str | None = None,
     audit_id: str | None = None,
 ) -> None:
+    """在线程池记录完成，避免同步审计写库占住事件循环。"""
     try:
         await run_in_threadpool(
             partial(
@@ -325,6 +327,7 @@ async def record_agent_failed(
     error: BaseException | str | None = None,
     audit_id: str | None = None,
 ) -> None:
+    """在线程池记录失败，不因审计写入失败再次打断业务。"""
     try:
         await run_in_threadpool(
             partial(
@@ -347,6 +350,7 @@ async def record_agent_waiting_confirmation(
     model_name: str | None = None,
     audit_id: str | None = None,
 ) -> None:
+    """在线程池记录等待确认及其票据编号。"""
     try:
         await run_in_threadpool(
             partial(

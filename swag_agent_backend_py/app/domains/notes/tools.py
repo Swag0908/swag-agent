@@ -88,6 +88,7 @@ async def import_local_markdown_notes(
     targetFolder: str,
     ctx: ToolCtx,
 ) -> str:
+    """模型调用的笔记导入入口；使用可信用户身份和后端允许目录，返回逐项导入结果。"""
     user_id = getattr(ctx, "user_id", None)
     if user_id is None:
         return "未登录，无法导入 Markdown 笔记。"

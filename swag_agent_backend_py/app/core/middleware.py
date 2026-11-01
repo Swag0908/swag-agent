@@ -29,10 +29,12 @@ _PUBLIC_PREFIXES = (
 
 
 def is_public_path(path: str) -> bool:
+    """按前缀判断是否允许匿名访问；登录、注册和健康检查属于公开入口。"""
     return any(path.startswith(prefix) for prefix in _PUBLIC_PREFIXES)
 
 
 def bearer_token(headers: Headers) -> str | None:
+    """提取 Authorization: Bearer <token> 中的令牌；缺失或格式不符返回 None。"""
     value = headers.get("authorization")
     if not value or not value.startswith("Bearer "):
         return None
@@ -40,6 +42,7 @@ def bearer_token(headers: Headers) -> str | None:
 
 
 def _resolve(token: str | None):  # noqa: ANN202
+    """用一次独立数据库会话验证令牌，返回最小用户身份。"""
     if not token:
         return None
     with SessionLocal() as db:
@@ -47,10 +50,15 @@ def _resolve(token: str | None):  # noqa: ANN202
 
 
 class AuthMiddleware:
+    """请求的身份检查门：验证数据库中的登录令牌，再把身份放入 request.state。
+
+    未登录访问受保护路径时直接返回 401，后面的路由不会执行。
+    """
     def __init__(self, app: ASGIApp) -> None:
         self.app = app
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        """处理每个请求；同步数据库查询放入线程池，避免阻塞其他异步请求。"""
         if scope["type"] != "http":
             await self.app(scope, receive, send)
             return

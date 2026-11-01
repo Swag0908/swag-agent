@@ -278,11 +278,13 @@ class NotesService:
     # ---------- 目录 ----------
 
     def home_dir(self, user_id: int | None) -> Path:
+        """推导该用户专属笔记目录；只返回路径，不创建目录。"""
         if user_id is None:
             raise AppError(401, "未登录")
         return self.root / f"user-{user_id}"
 
     def ensure_home(self, user_id: int | None) -> Path:
+        """按需创建用户目录和默认“未分类”目录。"""
         home = self.home_dir(user_id)
         try:
             home.mkdir(parents=True, exist_ok=True)
@@ -299,6 +301,7 @@ class NotesService:
     # ---------- 常规操作 ----------
 
     def tree(self, user_id: int) -> views.Node:
+        """生成目录树，只展示普通目录和 Markdown 文件，隐藏内部数据目录与符号链接。"""
         try:
             return self._build_node(self.ensure_home(user_id), f"user-{user_id}", "")
         except OSError as exc:
@@ -322,6 +325,7 @@ class NotesService:
         return views.Node(name, rel, "dir", children)
 
     def read(self, user_id: int, rel: str) -> views.FileView:
+        """校验 .md 后缀和用户目录边界，再返回 UTF-8 文本及文件信息。"""
         require_note_extension(rel)
         home = self.ensure_home(user_id)
         file = guard(home, rel)
@@ -339,12 +343,15 @@ class NotesService:
         return views.FileView(rel, file_name(rel), stat.st_size, int(stat.st_mtime * 1000), content)
 
     def create(self, user_id: int, rel: str, content: str | None) -> views.SaveResult:
+        """仅允许新建；同名文件存在时返回冲突，防止误覆盖。"""
         return self._write(user_id, rel, content, overwrite=False)
 
     def save(self, user_id: int, rel: str, content: str | None) -> views.SaveResult:
+        """整体保存笔记内容；目标可以是新文件，也可以覆盖已有文件。"""
         return self._write(user_id, rel, content, overwrite=True)
 
     def _write(self, user_id: int, rel: str, content: str | None, *, overwrite: bool) -> views.SaveResult:
+        """统一执行后缀、大小和路径检查；新建使用排他创建，保存允许覆盖。"""
         require_note_extension(rel)
         data = (content or "").encode("utf-8")
         max_bytes = _max_note_bytes()
@@ -408,6 +415,7 @@ class NotesService:
             index += 1
 
     def create_dir(self, user_id: int, rel: str) -> None:
+        """在当前用户目录内创建文件夹，缺少的父目录一并创建。"""
         home = self.ensure_home(user_id)
         directory = guard(home, rel)
         try:
@@ -416,6 +424,7 @@ class NotesService:
             raise _io_error(f"新建文件夹失败：{rel}") from exc
 
     def rename(self, user_id: int, from_rel: str | None, to_rel: str | None) -> None:
+        """在用户目录内改名或移动；保护系统分类，禁止覆盖已占用目标。"""
         if not from_rel or not from_rel.strip() or not to_rel or not to_rel.strip():
             raise BadRequest("重命名需要提供 from 与 to")
         if from_rel == UNCLASSIFIED:
@@ -446,6 +455,7 @@ class NotesService:
     # ---------- 删除与回收站 ----------
 
     def delete_file(self, user_id: int, rel: str) -> None:
+        """将笔记移入回收站并保留原路径，方便后续恢复。"""
         require_note_extension(rel)
         home = self.ensure_home(user_id)
         file = guard(home, rel)
@@ -456,6 +466,7 @@ class NotesService:
         self._trash_item(home, file, rel, "file")
 
     def delete_dir_to_trash(self, user_id: int, rel: str) -> None:
+        """把目录整体移入回收站；系统“未分类”目录不允许删除。"""
         if rel == UNCLASSIFIED:
             raise BadRequest(f"「{UNCLASSIFIED}」是系统文件夹，不能删除")
         home = self.ensure_home(user_id)
@@ -463,6 +474,7 @@ class NotesService:
         self._trash_item(home, directory, rel, "dir")
 
     def delete_dir_flatten(self, user_id: int, rel: str) -> None:
+        """将目录内 Markdown 笔记平铺到“未分类”，再删除原目录及其剩余内容。"""
         if rel == UNCLASSIFIED:
             raise BadRequest(f"「{UNCLASSIFIED}」是系统文件夹，不能删除")
         home = self.ensure_home(user_id)
@@ -485,6 +497,7 @@ class NotesService:
             raise _io_error(f"删除文件夹（笔记移入未分类）失败：{rel}") from exc
 
     def list_trash(self, user_id: int) -> list[views.TrashView]:
+        """先清理过期条目，再按删除时间倒序返回可恢复项。"""
         home = self.home_dir(user_id)
         try:
             self.purge_trash_home(home)
@@ -513,6 +526,7 @@ class NotesService:
             raise _io_error("读取回收站失败") from exc
 
     def restore(self, user_id: int, trash_id: str) -> None:
+        """恢复回收站数据；原位置不可用时放入“未分类”，同名自动加序号。"""
         home = self.ensure_home(user_id)
         entry_dir = self._require_trash_entry(home, trash_id)
         meta = read_entry_meta(entry_dir)
@@ -535,6 +549,7 @@ class NotesService:
             raise _io_error(f"恢复失败：{trash_id}") from exc
 
     def delete_trash_entry(self, user_id: int, trash_id: str) -> None:
+        """永久删除一条回收站记录及内容，无法再通过回收站恢复。"""
         home = self.home_dir(user_id)
         entry_dir = self._require_trash_entry(home, trash_id)
         try:
@@ -543,6 +558,7 @@ class NotesService:
             raise _io_error("删除回收站条目失败") from exc
 
     def clear_trash(self, user_id: int) -> None:
+        """永久清空当前用户回收站。"""
         home = self.home_dir(user_id)
         try:
             self.purge_trash_home(home)
@@ -598,6 +614,7 @@ class NotesService:
         return directory
 
     def _trash_item(self, home: Path, source: Path, original_rel: str, kind: str) -> None:
+        """为一次删除创建独立目录，移动数据后写入原路径、类型和删除时间。"""
         try:
             trash = home / TRASH_DIR
             trash.mkdir(parents=True, exist_ok=True)

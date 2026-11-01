@@ -37,6 +37,7 @@ def _now_iso() -> str:
 
 
 class AppError(Exception):
+    """携带 HTTP 状态码和中文提示的业务异常，由统一处理器转成前端可读响应。"""
     def __init__(self, status_code: int, message: str, *, code: str | None = None, extra: dict[str, Any] | None = None):
         super().__init__(message)
         self.status_code = status_code
@@ -46,21 +47,25 @@ class AppError(Exception):
 
 
 class Unauthorized(AppError):
+    """身份无效或未登录，对应 HTTP 401。"""
     def __init__(self, message: str = "请先登录"):
         super().__init__(401, message, code="UNAUTHORIZED", extra={"code": "UNAUTHORIZED", "message": message})
 
 
 class Forbidden(AppError):
+    """身份已知但不允许执行操作，对应 HTTP 403。"""
     def __init__(self, message: str = "无权执行该操作"):
         super().__init__(403, message)
 
 
 class NotFound(AppError):
+    """资源不存在，或业务层将不属于当前用户的资源隐藏为 HTTP 404。"""
     def __init__(self, message: str = "资源不存在"):
         super().__init__(404, message)
 
 
 class BadRequest(AppError):
+    """输入不符合业务要求，对应 HTTP 400。"""
     def __init__(self, message: str = "请求参数不正确"):
         super().__init__(400, message)
 
@@ -93,6 +98,7 @@ class ConfirmationRequired(AppError):
 
 
 class ConfirmationInvalid(AppError):
+    """确认票据过期、已使用或不匹配，对应 HTTP 409。"""
     def __init__(self, message: str = "确认票据无效或已过期"):
         super().__init__(409, message, code="CONFIRMATION_INVALID")
         self.extra = {"code": "CONFIRMATION_INVALID", "message": message, "timestamp": _now_iso()}
@@ -109,6 +115,10 @@ def _spring_body(request: Request, status: int, message: str) -> dict[str, Any]:
 
 
 def install_error_handlers(app: FastAPI) -> None:
+    """为业务异常、参数校验错误和未处理异常安装统一 JSON 响应格式。
+
+    普通异常返回通用提示；需要确认的异常使用专用字段，方便前端识别。
+    """
     @app.exception_handler(AppError)
     async def _app_error(request: Request, exc: AppError):  # noqa: ANN202
         if exc.extra.get("code") in {"UNAUTHORIZED", "CONFIRMATION_REQUIRED", "CONFIRMATION_INVALID"}:
